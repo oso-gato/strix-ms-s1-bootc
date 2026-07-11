@@ -9,6 +9,8 @@ name: validate
 
 on:
   workflow_dispatch:
+  push:
+    branches: ["validation-*"]   # branch validation runs (dispatch registry only sees main)
 
 permissions:
   contents: read
