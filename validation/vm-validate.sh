@@ -36,7 +36,18 @@ QEMU_MODEL="QEMU NVMe Ctrl"                      # QEMU's fixed NVMe model strin
 SYS_BYID="nvme-QEMU_NVMe_Ctrl_${SYS_SERIAL}"
 DATA_BYID="nvme-QEMU_NVMe_Ctrl_${DATA_SERIAL}"
 SSH_PORT=2222
-OVMF_CODE=$(ls /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd 2>/dev/null | head -1)
+# Resolve OVMF firmware without `ls` (a partial-match `ls` exits 2, which
+# pipefail+set-e would turn into a silent early death). CODE + its matching
+# VARS template, newest layout first.
+OVMF_CODE=""; OVMF_VARS_TPL=""
+for pair in \
+  "/usr/share/OVMF/OVMF_CODE_4M.fd:/usr/share/OVMF/OVMF_VARS_4M.fd" \
+  "/usr/share/OVMF/OVMF_CODE.fd:/usr/share/OVMF/OVMF_VARS.fd" \
+  "/usr/share/edk2/x64/OVMF_CODE.4m.fd:/usr/share/edk2/x64/OVMF_VARS.4m.fd"; do
+  c="${pair%%:*}"; v="${pair##*:}"
+  if [ -e "$c" ] && [ -e "$v" ]; then OVMF_CODE="$c"; OVMF_VARS_TPL="$v"; break; fi
+done
+[ -n "$OVMF_CODE" ] || { echo "vm-validate: FAIL — no OVMF firmware found (install the 'ovmf' package)" >&2; exit 1; }
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-1800}"       # 30 min per install
 HALT_WINDOW="${HALT_WINDOW:-480}"                # 8 min = "guard held" window
 
@@ -90,7 +101,7 @@ vm() {
   QEMU_PID=$!
 }
 
-fresh_vars() { rm -f "$WORK/ovmf_vars.fd"; cp "$(dirname "$OVMF_CODE")/OVMF_VARS$(basename "$OVMF_CODE" | sed 's/OVMF_CODE//')" "$WORK/ovmf_vars.fd" 2>/dev/null || cp /usr/share/OVMF/OVMF_VARS_4M.fd "$WORK/ovmf_vars.fd" 2>/dev/null || cp /usr/share/OVMF/OVMF_VARS.fd "$WORK/ovmf_vars.fd"; sudo chmod 666 "$WORK/ovmf_vars.fd"; }
+fresh_vars() { rm -f "$WORK/ovmf_vars.fd"; cp "$OVMF_VARS_TPL" "$WORK/ovmf_vars.fd"; chmod 666 "$WORK/ovmf_vars.fd"; }
 
 wait_install_exit() {  # PASS = qemu exits (kickstart 'reboot' + -no-reboot) within timeout
   local t=0
