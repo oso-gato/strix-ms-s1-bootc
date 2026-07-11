@@ -21,7 +21,13 @@ NMDIR=/etc/NetworkManager/system-connections
 LOCK=/run/lock/strix-setup.lock
 AK_REPO="oso-gato/ak-private"
 AK_PATH="strix/firstboot.yaml"
-TS_ARGS=(--hostname=strix --advertise-routes=10.0.50.0/24)
+# --ssh (A13): Tailscale SSH — tailnet-identity-authenticated shell, keyless
+# over the tailnet (tailscaled answers port 22 for tailnet peers; governed by
+# the tailnet policy's "ssh" rules). LAN SSH and mosh keep flowing through
+# OpenSSH with the GitHub-synced keys; R4d/R5 unchanged (still no password on
+# any path). The noir-era exclusion is superseded: upstream #12442 (SSH broken
+# on SELinux) closed 2024-08; fedora-bootstrap runs --ssh on enforcing Fedora.
+TS_ARGS=(--hostname=strix --advertise-routes=10.0.50.0/24 --ssh)
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "strix-setup must run as root: sudo strix-setup" >&2
