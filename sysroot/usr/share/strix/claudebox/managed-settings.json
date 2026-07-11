@@ -1,5 +1,5 @@
 {
-    "comment": "strix claudebox managed settings (R8/D11): auto mode + xhigh effort; CLI currency comes from the DAILY box rebuild, not self-update; the deny list enforces the house package discipline (host/box immutability) — no fleet-policy layer (out of scope, D10). Model + ultracode are session-scoped and live in the /usr/bin/claude wrapper (--model default = the recommended alias, never a fixed pin).",
+    "comment": "strix claudebox managed settings (R8/D11): auto mode + xhigh effort; CLI currency comes from the DAILY box rebuild, not self-update. The deny list is a BEST-EFFORT guardrail against casual package-discipline drift, not enforcement — prefix rules are reorderable and the in-box user has sudo; the real mechanism is the disposable box + daily rebuild (anything installed ad hoc dies within 24h). No fleet-policy layer (out of scope, D10). Model + ultracode are session-scoped and live in the /usr/bin/claude wrapper (--model default = the recommended alias, never a fixed pin).",
     "effortLevel": "xhigh",
     "env": {
         "DISABLE_UPDATES": "1",
@@ -24,7 +24,11 @@
             "Bash(gem install:*)",
             "Bash(brew install:*)",
             "Bash(flatpak install:*)",
-            "Bash(snap install:*)"
+            "Bash(snap install:*)",
+            "Bash(sudo dnf install:*)",
+            "Bash(sudo dnf -y install:*)",
+            "Bash(sudo rpm -i:*)",
+            "Bash(sudo rpm -U:*)"
         ]
     }
 }

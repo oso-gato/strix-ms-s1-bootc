@@ -71,6 +71,12 @@ tailscale_authkey: "tskey-auth-..."   # optional; pre-approved + tagged;
 - **VMs ride through reinstalls**, not through unattended update reboots —
   running guests are shut down when the timer reboots. Acceptable for a
   homelab; pin the timer with a drop-in if a guest ever becomes precious.
+- **Data drive absent = libvirt deliberately DOWN (fail-closed).** The box
+  boots (mounts are `nofail`; sshd uses `WantsMountsFor` so SSH survives),
+  but the libvirt daemons carry `RequiresMountsFor` on `/var/lib/libvirt` +
+  `/etc/libvirt` and refuse to start — a daemon running against image config
+  would write VM images/nvram onto the disposable system drive. Podman is
+  fail-closed the same way.
 - **ghcr visibility**: the box pulls `:stable` unauthenticated — the ghcr
   package must be public (or the box needs a pull secret; not shipped).
 - **mosh** uses UDP 60001–60999 — no host firewall; over the tailnet, allow
@@ -95,6 +101,12 @@ tailscale_authkey: "tskey-auth-..."   # optional; pre-approved + tagged;
   merge — new libvirt default configs arriving in future images won't appear
   in the persisted copy (libvirt configs are stable; revisit if a release
   note says otherwise).
+- BIB's `--type anaconda-iso` is flagged legacy upstream (successor:
+  `bootc-installer`). `build-iso.sh` pins the BIB image by digest; when
+  bumping, re-verify the kickstart-injection contract or migrate types.
+- XFS caps filesystem labels at 12 chars, so `strix-containers` exists only
+  as the GPT partition name; the filesystem label is `strix-ctr`. Nothing
+  operational keys on labels — mounts and verify use UUIDs.
 
 ## 6. Pre-hardware validation (two-disk VM)
 

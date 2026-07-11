@@ -40,8 +40,10 @@ COPY sysroot/ /
 #                      driver-qemu/-network/-nodedev/-storage-core,
 #                      daemon-config-network) — we list the load-bearing ones
 #                      explicitly anyway so the manifest is self-documenting.
-#   virt extras      : swtpm + edk2-ovmf (UEFI/TPM guests; weak-dep'd only,
-#                      so explicit), libvirt-client (virsh), guestfs not needed.
+#   virt extras      : swtpm + edk2-ovmf (UEFI/TPM guests) + qemu-device-usb-
+#                      host/-redirect (Cockpit's USB passthrough — Fedora
+#                      Recommends, dropped by install_weak_deps=False, so
+#                      explicit), libvirt-client (virsh).
 #   shell            : tmux mosh (R4; mosh = UDP 60001-60999, no config on a
 #                      firewall-less host)
 #   claudebox        : distrobox (box runtime; claude-code lives IN the box)
@@ -57,7 +59,7 @@ RUN dnf -y --setopt=install_weak_deps=False install \
         qemu-kvm-core libvirt-daemon-driver-qemu libvirt-daemon-driver-network \
         libvirt-daemon-driver-nodedev libvirt-daemon-driver-storage-core \
         libvirt-daemon-config-network libvirt-dbus libvirt-client virt-install \
-        swtpm edk2-ovmf \
+        swtpm edk2-ovmf qemu-device-usb-host qemu-device-usb-redirect \
         tmux mosh distrobox gh python3 python3-pyyaml ethtool \
     && dnf clean all \
     && rm -rf /var/log/* /var/cache/* /var/lib/dnf
@@ -80,7 +82,11 @@ RUN echo "strix" > /etc/hostname
 #   cockpit.socket    : socket-activated web console on :9090 (R6)
 #   tailscaled        : VPN daemon; onboarding happens at strix-setup (R3/R12)
 #   podman.socket     : /run/podman/podman.sock for cockpit-podman + claudebox
-#   virt* sockets     : modular libvirt, socket-activated (R7)
+#   virt* sockets     : modular libvirt, socket-activated (R7). Fedora's
+#                       90-default.preset would enable the full modular set
+#                       anyway; this list is the PINNED subset the box
+#                       actually depends on (incl. virtnodedevd — cockpit-
+#                       machines' Host-devices UI needs its socket listening).
 #   sshd              : enabled in base, re-enabled defensively
 #   strix-* units     : mounts, seeds, firstboot, verify, timers (R9/R12/R13)
 #   claudebox timer   : per-user (--global) daily rebuild decision (R8)
@@ -88,7 +94,7 @@ RUN echo "strix" > /etc/hostname
 RUN systemctl enable \
         sshd.service cockpit.socket podman.socket tailscaled.service \
         virtqemud.socket virtnetworkd.socket virtstoraged.socket \
-        virtlogd.socket \
+        virtnodedevd.socket virtlogd.socket \
         var-home.mount var-lib-containers.mount var-lib-libvirt.mount \
         var-log.mount etc-libvirt.mount \
         strix-home-seed.service strix-libvirt-seed.service \

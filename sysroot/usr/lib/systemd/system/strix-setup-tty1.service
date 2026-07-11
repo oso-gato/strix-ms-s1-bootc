@@ -1,17 +1,21 @@
-# Interactive setup on the local console (first-one-wins vs the SSH path):
-# takes over tty1 while setup is pending. strix-setup's flock + the
-# .setup-done sentinel make tty1 and SSH mutually exclusive; the loser sees
-# the sentinel and no-ops.
+# Interactive setup on the local console. P4-review hardened: on a headless
+# box a boot-time strix-setup would (a) grab the setup flock forever, locking
+# out the documented SSH path (first-one-wins inverted), and (b) as a oneshot,
+# wedge multi-user.target in 'activating'. So:
+#   Type=exec        — the start job completes at spawn; the boot never waits.
+#   keypress gate    — the flock is only taken once a human presses ENTER at
+#                      the console; until then the SSH path is uncontested.
+# strix-setup's flock + sentinel still arbitrate if both engage.
 [Unit]
-Description=strix interactive first-boot setup on tty1 (first-one-wins)
+Description=strix interactive first-boot setup on tty1 (keypress-gated)
 ConditionPathExists=!/var/home/.strix-secrets/.setup-done
 ConditionPathExists=/dev/tty1
 After=strix-firstboot-setup.service getty.target
 Conflicts=getty@tty1.service
 
 [Service]
-Type=oneshot
-ExecStart=/usr/bin/strix-setup
+Type=exec
+ExecStart=/bin/sh -c 'printf "\\n  strix first-boot setup — press ENTER to run it on this console\\n  (or ssh core@strix && sudo strix-setup from another machine)\\n\\n"; read -r _ && exec /usr/bin/strix-setup'
 StandardInput=tty
 StandardOutput=tty
 StandardError=tty

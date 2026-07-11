@@ -11,9 +11,15 @@ ConditionPathIsMountPoint=/var/lib/libvirt
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/sh -c 'mkdir -p /var/lib/libvirt/etc-libvirt; \
-  if [ -z "$(ls -A /var/lib/libvirt/etc-libvirt)" ]; then \
-    cp -a /etc/libvirt/. /var/lib/libvirt/etc-libvirt/ && \
+# Transactional (P4 review): copy into a sibling temp dir on the SAME
+# filesystem, then rename into place — a failed/interrupted copy can never
+# leave a partial payload that etc-libvirt.mount would bind over /etc/libvirt.
+ExecStart=/bin/sh -c 'set -e; \
+  if [ ! -d /var/lib/libvirt/etc-libvirt ] || [ -z "$(ls -A /var/lib/libvirt/etc-libvirt)" ]; then \
+    rm -rf /var/lib/libvirt/.etc-libvirt.new; \
+    cp -a /etc/libvirt /var/lib/libvirt/.etc-libvirt.new; \
+    rm -rf /var/lib/libvirt/etc-libvirt; \
+    mv /var/lib/libvirt/.etc-libvirt.new /var/lib/libvirt/etc-libvirt; \
     logger -t strix-libvirt-seed -p notice "seeded etc-libvirt from image defaults"; \
   fi'
 

@@ -57,14 +57,21 @@ jobs:
             | sudo tee /etc/containers/storage.conf >/dev/null
           sudo podman info --format '{{.Store.GraphDriverName}}'
 
+      # Version tags stay IMMUTABLE (P4 review): a manual dispatch releases
+      # the CHANGELOG version verbatim; scheduled fortnightly rebuilds append
+      # a date suffix so they never overwrite an existing release/image tag —
+      # :stable is the only moving pointer.
       - name: Read release version from CHANGELOG
         id: ver
         run: |
           set -euo pipefail
           v="$(grep -m1 -oE '^## v[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | sed 's/^## //')"
           test -n "$v"
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            v="$v-$(date -u +%Y%m%d)"
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "Release version (from CHANGELOG): $v"
+          echo "Release version: $v (event: ${GITHUB_EVENT_NAME})"
 
       - name: Build bootc image
         run: |
@@ -90,7 +97,9 @@ jobs:
           ./build-iso.sh
 
       - name: Publish Release
-        uses: softprops/action-gh-release@v2
+        # Pinned by commit SHA (v2 tag as of 2026-07-11) — this step holds
+        # contents:write in a pipeline that feeds an auto-updating host OS.
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           tag_name: ${{ steps.ver.outputs.version }}
           name: strix ${{ steps.ver.outputs.version }}

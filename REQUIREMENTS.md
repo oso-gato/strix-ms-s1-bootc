@@ -224,9 +224,15 @@ UUIDs, in this order:
 | 3 | `strix-vm` | 750 GiB | `/var/lib/libvirt` (+ `etc-libvirt/` → `/etc/libvirt` bind) |
 | 4 | `strix-log` | remainder (~225 GiB) | `/var/log` |
 
-Mounts are `nofail`; ordering races are closed per-service with `RequiresMountsFor`
-drop-ins (sshd → `/var/home`; podman → `/var/lib/containers`; libvirt daemons →
-`/var/lib/libvirt` + the `/etc/libvirt` bind). **Migration note:** this layout
+*(Implementation-fact refinement per the freeze header: "Label" = GPT
+partition name; XFS caps filesystem labels at 12 chars, so partition 2's
+filesystem label is `strix-ctr`. Mount units and verification key on UUIDs,
+never labels.)*
+
+Mounts are `nofail`; ordering races are closed per-service with mount
+dependencies (sshd waits-for `/var/home` but still starts if the drive is
+dead — the box must stay reachable; podman and the libvirt daemons are
+fail-closed on their mounts so state can never land on the system drive). **Migration note:** this layout
 differs from the predecessor FCOS box, so the first strix install is a one-time
 `strix-wipe.iso` event; preserve semantics apply thereafter.
 

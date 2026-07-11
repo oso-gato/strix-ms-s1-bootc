@@ -6,7 +6,12 @@
 [Unit]
 Description=strix post-install verification of provisioning invariants
 Wants=network-online.target
-After=network-online.target NetworkManager.service etc-libvirt.mount strix-firstboot-setup.service
+# All four data mounts listed explicitly: nofail drops their local-fs.target
+# edge, so without these After= edges the findmnt assertions could race a
+# slow NVMe on a healthy boot (P4 review). Ordering against a failed mount
+# job releases immediately — loud failure on a genuinely absent drive stays.
+After=network-online.target NetworkManager.service strix-firstboot-setup.service
+After=var-home.mount var-lib-containers.mount var-lib-libvirt.mount var-log.mount etc-libvirt.mount
 
 [Service]
 Type=oneshot
@@ -25,6 +30,7 @@ ExecStart=/bin/sh -c 'state=$(nmcli -g GENERAL.STATE device show wlp99s0 2>/dev/
 ExecStart=/bin/sh -c 'test -f /lib/firmware/regulatory.db || { logger -t strix-verify -p err "regulatory.db missing"; exit 1; }'
 # R3: subnet-router forwarding + tailscale present.
 ExecStart=/bin/sh -c '[ "$(sysctl -n net.ipv4.ip_forward)" = "1" ] || { logger -t strix-verify -p err "ip_forward not enabled"; exit 1; }'
+ExecStart=/bin/sh -c '[ "$(sysctl -n net.ipv6.conf.all.forwarding)" = "1" ] || { logger -t strix-verify -p err "ipv6 forwarding not enabled"; exit 1; }'
 ExecStart=/bin/sh -c 'command -v tailscale >/dev/null || { logger -t strix-verify -p err "tailscale binary missing"; exit 1; }'
 # R6: cockpit socket-activated on any-interface :9090; config hardening present.
 ExecStart=/bin/sh -c 'systemctl is-active --quiet cockpit.socket || { logger -t strix-verify -p err "cockpit.socket not active"; exit 1; }'
@@ -32,7 +38,7 @@ ExecStart=/bin/sh -c 'ss -tlnH "sport = :9090" | grep -Eq "^LISTEN.*[[:space:]](
 ExecStart=/bin/sh -c 'grep -Eq "^[[:space:]]*LoginTo[[:space:]]*=[[:space:]]*false" /etc/cockpit/cockpit.conf || { logger -t strix-verify -p err "cockpit.conf missing LoginTo=false"; exit 1; }'
 ExecStart=/bin/sh -c 'rpm -q cockpit-bridge cockpit-system cockpit-ws cockpit-podman cockpit-networkmanager cockpit-files cockpit-ostree cockpit-selinux cockpit-machines >/dev/null || { logger -t strix-verify -p err "cockpit subpackage(s) missing"; exit 1; }'
 # R7: libvirt sockets live.
-ExecStart=/bin/sh -c 'systemctl is-active --quiet virtqemud.socket && systemctl is-active --quiet virtnetworkd.socket && systemctl is-active --quiet virtstoraged.socket || { logger -t strix-verify -p err "libvirt socket(s) not active"; exit 1; }'
+ExecStart=/bin/sh -c 'for s in virtqemud virtnetworkd virtstoraged virtnodedevd virtlogd; do systemctl is-active --quiet "$s.socket" || { logger -t strix-verify -p err "libvirt socket $s.socket not active"; exit 1; }; done'
 # R4/R8: shell + workbench tooling baked.
 ExecStart=/bin/sh -c 'command -v mosh-server >/dev/null && command -v tmux >/dev/null && command -v distrobox >/dev/null && command -v gh >/dev/null || { logger -t strix-verify -p err "shell/workbench tool missing (mosh/tmux/distrobox/gh)"; exit 1; }'
 ExecStart=/bin/sh -c 'test -f /usr/share/strix/claudebox/distrobox.ini || { logger -t strix-verify -p err "claudebox manifest missing"; exit 1; }'

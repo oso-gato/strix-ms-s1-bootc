@@ -1,11 +1,11 @@
-# Shortly after boot, then daily. Persistent catches up after downtime.
+# Shortly after boot, then daily. (Monotonic timers only — Persistent= would
+# be a no-op here; it applies to OnCalendar= timers alone.)
 [Unit]
 Description=strix authorized_keys sync schedule
 
 [Timer]
 OnBootSec=2min
 OnUnitActiveSec=24h
-Persistent=true
 
 [Install]
 WantedBy=timers.target

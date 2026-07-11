@@ -2,18 +2,22 @@
 # claude — host wrapper: every session runs INSIDE the claudebox distrobox
 # (R8; the host never runs claude-code). Behavior:
 #   * box missing            -> build it first (blocks with progress).
-#   * rebuild in progress    -> attach to its log, then continue.
+#   * rebuild in progress    -> follow its log, then continue into a session.
 #   * daily refresh came due while you worked -> rebuild NOW on session exit.
 #   * holds a SHARED session lock so claudebox-daily defers while you work.
 # Model policy (D11): --model default = Claude Code's RECOMMENDED alias —
 # never a fixed pin; a client update moves the model with it. ultracode is
 # session-scoped, so the wrapper is the only place it can be defaulted.
 set -uo pipefail
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+# Unconditional pin (P4 review): an inherited XDG_RUNTIME_DIR from `su -` /
+# `sudo -iu core` would aim rootless podman + systemctl --user at the wrong
+# runtime dir.
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 state="$HOME/.local/state/claudebox"; mkdir -p "$state"
 
-if systemctl --user is-active --quiet claudebox-rebuild-run.service 2>/dev/null; then
-    exec /usr/bin/claudebox-rebuild --watch-only
+if systemctl --user is-active --quiet claudebox-rebuild-run.service 2>/dev/null \
+   || [ "$(systemctl --user show -p ActiveState --value claudebox-rebuild-run.service 2>/dev/null)" = "activating" ]; then
+    /usr/bin/claudebox-rebuild --watch-only || true
 fi
 
 if ! podman container exists claudebox 2>/dev/null; then
@@ -21,17 +25,20 @@ if ! podman container exists claudebox 2>/dev/null; then
     /usr/bin/claudebox-rebuild
 fi
 
-# Hold a SHARED session lock for the session's lifetime; retry the transient
-# post-rebuild OCI/PTY race (fresh container's /dev/pts can need a moment).
+# Hold a SHARED session lock for the session's lifetime. Retry ONLY the
+# OCI/exec-setup failures (125/126 — the transient post-rebuild /dev/pts
+# race); a real claude exit code passes through untouched (P4 review).
 run_session() {
-    local tries=0
+    local tries=0 rc
     while :; do
         flock -s "$state/session.lock" distrobox enter claudebox -- bash -lc \
             'exec /usr/bin/claude --model default --settings "{\"ultracode\":true}" "$@"' bash "$@"
         rc=$?
-        [ $rc -eq 0 ] && return 0
+        if [ "$rc" -ne 125 ] && [ "$rc" -ne 126 ]; then
+            return "$rc"
+        fi
         tries=$((tries + 1))
-        [ $tries -ge 3 ] && return $rc
+        [ "$tries" -ge 3 ] && return "$rc"
         sleep 2
     done
 }

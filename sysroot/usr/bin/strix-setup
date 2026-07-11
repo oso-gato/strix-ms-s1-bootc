@@ -49,11 +49,13 @@ P_HASH=""; P_TS_KEY=""
 declare -A P_SSID P_PSK
 
 workdir=$(mktemp -d); chmod 700 "$workdir"
+# gh must never write a plaintext token under /root/.config (its headless
+# fallback store): confine ALL gh state to the ephemeral workdir, so even a
+# power loss mid-setup strands nothing on disk (P4 review).
+export GH_CONFIG_DIR="$workdir/gh"
 cleanup() {
-  rm -rf "$workdir"
-  # Never leave a GitHub token on the box (R12): drop the gh credential store
-  # entry whether or not the pull succeeded.
   gh auth logout --hostname github.com >/dev/null 2>&1 || true
+  rm -rf "$workdir"
 }
 trap cleanup EXIT
 
@@ -68,11 +70,13 @@ fetch_yaml_devflow() {
 fetch_yaml_pat() {
   printf 'Paste the fine-grained PAT (read-only, %s): ' "$AK_REPO"
   read -rs PAT; echo
+  # -H @-: the token rides stdin, never argv — /proc/<pid>/cmdline stays
+  # clean for the fetch's duration (P4 review).
   curl -fsSL --retry 2 \
-       -H "Authorization: Bearer $PAT" \
+       -H @- \
        -H "Accept: application/vnd.github.raw" \
        "https://api.github.com/repos/$AK_REPO/contents/$AK_PATH" \
-       -o "$workdir/firstboot.yaml"
+       -o "$workdir/firstboot.yaml" <<<"Authorization: Bearer $PAT"
   local rc=$?
   unset PAT
   return $rc
@@ -253,6 +257,10 @@ echo "[ok] sudo now requires the core password (bootstrap NOPASSWD removed)."
 : >"$SENTINEL"
 chmod 0600 "$SENTINEL"
 rm -f /etc/motd.d/10-strix-setup
+# This install's credentials are current — mark restore as satisfied so the
+# next boot's orchestrator goes straight to snapshot-refresh mode.
+install -d -m 0755 /var/lib/strix
+touch /var/lib/strix/restore-done
 
 echo "[ok] persisted credentials to $SECRETS"
 echo "── strix setup complete ──"

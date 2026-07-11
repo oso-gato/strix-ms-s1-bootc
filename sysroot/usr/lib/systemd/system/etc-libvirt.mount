@@ -4,16 +4,20 @@
 # system drive's /etc is wiped by reinstall; 3-way /etc merge only covers
 # bootc UPDATES, not reinstalls).
 #
-# strix-libvirt-seed populates the source dir from the image's /etc/libvirt
-# on first use (an empty bind source would hide the RPM-shipped defaults);
-# strix-libvirt-relabel restores SELinux labels after the bind lands.
-# nofail: if the data drive is absent, /etc/libvirt falls back to the image
-# content — libvirt runs with no machines defined rather than a dead boot.
+# Requires=strix-libvirt-seed (not Wants): the seed populates the bind source
+# transactionally and exits 0 when a payload already exists — binding an
+# empty/partial source over /etc/libvirt must never happen (P4 review).
+#
+# Data-drive-absent behavior is FAIL-CLOSED by design: this mount is nofail
+# (boot proceeds, SSH/Cockpit live), but the libvirt daemons carry
+# RequiresMountsFor on both mounts and therefore stay DOWN — a virtqemud
+# running against image config would write VM images and nvram onto the
+# disposable system drive. Deliberate trade-off; see BUILD-SPEC §4.
 [Unit]
 Description=strix /etc/libvirt (bind from data drive: strix-vm/etc-libvirt)
 RequiresMountsFor=/var/lib/libvirt
 After=strix-libvirt-seed.service
-Wants=strix-libvirt-seed.service
+Requires=strix-libvirt-seed.service
 
 [Mount]
 What=/var/lib/libvirt/etc-libvirt

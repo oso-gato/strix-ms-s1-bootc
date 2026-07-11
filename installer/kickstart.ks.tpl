@@ -24,7 +24,7 @@ timezone UTC --utc
 # libvirt (virsh/cockpit-machines system connection). Password field locked
 # until strix-setup sets it — SSH is key-only regardless (sshd_config.d).
 rootpw --lock
-user --name=core --uid=1000 --groups=wheel,libvirt --shell=/bin/bash --lock
+user --name=core --uid=1000 --gid=1000 --groups=wheel,libvirt --shell=/bin/bash --lock
 @SSHKEYS@
 
 # Anaconda may only touch the system drive; %pre re-verifies identity first.
@@ -144,9 +144,12 @@ SEED_MNT=/mnt/strix-home-seed
 mkdir -p "$SEED_MNT"
 if mount -U "e3b1c7a5-2f4d-4b8e-9c6a-1d5f7e9b3a21" "$SEED_MNT"; then
     if [ ! -d "$SEED_MNT/core" ] && [ -d /var/home/core ]; then
+        # cp -a preserves the security.selinux xattrs Anaconda applied to
+        # /var/home/core — that IS the labeling mechanism here (restorecon
+        # under /mnt is a file_contexts <<none>> no-op; the runtime
+        # strix-home-seed unit relabels at the real path as backstop).
         cp -a /var/home/core "$SEED_MNT/core"
         chown -R 1000:1000 "$SEED_MNT/core"
-        restorecon -R "$SEED_MNT/core" 2>/dev/null || true
         echo "strix %post: seeded core home onto the data drive."
     else
         echo "strix %post: data-drive home already present (preserve) — untouched."

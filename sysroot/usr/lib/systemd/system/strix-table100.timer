@@ -1,11 +1,11 @@
 # 30s after boot (let NM settle the bond + gateway), then every 5 min.
+# (Monotonic timers only — Persistent= would be a no-op here.)
 [Unit]
 Description=strix routing-table-100 default-route keeper schedule
 
 [Timer]
 OnBootSec=30s
 OnUnitActiveSec=5min
-Persistent=true
 
 [Install]
 WantedBy=timers.target

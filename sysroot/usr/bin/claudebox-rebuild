@@ -5,20 +5,35 @@
 # so it outlives the box it recreates; this command only triggers + tails it —
 # Ctrl-C is safe (the rebuild keeps going).
 set -uo pipefail
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 run=claudebox-rebuild-run.service
+
+state_of() { systemctl --user show -p ActiveState --value "$run" 2>/dev/null; }
 
 if [ "${1:-}" != "--watch-only" ]; then
     systemctl --user reset-failed "$run" 2>/dev/null || true
     echo ">> claudebox: starting rebuild — fresh image + latest Claude Code (~2-5 min)…"
     systemctl --user start --no-block "$run"
+    # Wait for the start job to materialize before we begin polling state.
+    for _ in $(seq 1 20); do
+        case "$(state_of)" in activating|active) break ;; esac
+        sleep 0.5
+    done
 fi
 
 journalctl --user -u "$run" -f --no-pager &
 follower=$!
 trap 'kill "$follower" 2>/dev/null' EXIT INT TERM
 
-while systemctl --user is-active --quiet "$run"; do sleep 2; done
+# A Type=oneshot service in flight reports 'activating' (never 'active'), so
+# poll ActiveState directly — `is-active` would declare success while the
+# destroy+recreate is still running (P4 review).
+while :; do
+    case "$(state_of)" in
+        activating|active|reloading|deactivating) sleep 2 ;;
+        *) break ;;
+    esac
+done
 kill "$follower" 2>/dev/null || true
 
 if systemctl --user is-failed --quiet "$run"; then
