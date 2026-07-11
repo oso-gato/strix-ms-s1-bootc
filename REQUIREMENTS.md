@@ -317,3 +317,10 @@ equivalents, migration note (one-time wipe). On ship: a reference-only banner PR
 | P3 | CI: fortnightly image build→push + ISO build→Release; anti-brick gate |
 | P4 | Adversarial multi-agent review (bootc correctness, systemd ordering, kickstart safety, credential audit, R1–R14 traceability) + fixes |
 | P5 | Push the build, trigger first CI run, on-box validation checklist, reference-only PR to the FCOS repo |
+
+# Amendments (operator-signed, post-freeze)
+
+| # | Date | Amendment |
+|---|---|---|
+| A1 | 2026-07-11 | fastfetch runs on **every** interactive SSH/mosh login (banner before the tmux attach; suppressed inside tmux panes). Extends R4. |
+| A2 | 2026-07-11 | **v1.0 is held**: further programs are to be added before the 1.0 designation. Releases continue on a v0.9.x pre-series; the published v1.0.0 release/tag was withdrawn. |

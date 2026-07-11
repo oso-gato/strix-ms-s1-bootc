@@ -1,8 +1,12 @@
 # Changelog
 
-## v1.0.0 — 2026-07-11
+## v0.9.0 — 2026-07-11
 
-First release, built to the frozen spec (REQUIREMENTS.md v1.0, R1–R14 / D1–D14).
+Pre-1.0 series (amendment A2: v1.0 held while the operator's remaining
+program list lands; the briefly-published v1.0.0 release was withdrawn).
+Adds A1: fastfetch banner on every ssh/mosh login.
+
+Built to the frozen spec (REQUIREMENTS.md v1.0, R1–R14 / D1–D14).
 
 - bootc image on `quay.io/fedora/fedora-bootc:44` (standard set), additive only;
   single source of truth = `Containerfile`.

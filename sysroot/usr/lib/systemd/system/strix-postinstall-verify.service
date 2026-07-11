@@ -40,7 +40,7 @@ ExecStart=/bin/sh -c 'rpm -q cockpit-bridge cockpit-system cockpit-ws cockpit-po
 # R7: libvirt sockets live.
 ExecStart=/bin/sh -c 'for s in virtqemud virtnetworkd virtstoraged virtnodedevd virtlogd; do systemctl is-active --quiet "$s.socket" || { logger -t strix-verify -p err "libvirt socket $s.socket not active"; exit 1; }; done'
 # R4/R8: shell + workbench tooling baked.
-ExecStart=/bin/sh -c 'command -v mosh-server >/dev/null && command -v tmux >/dev/null && command -v distrobox >/dev/null && command -v gh >/dev/null || { logger -t strix-verify -p err "shell/workbench tool missing (mosh/tmux/distrobox/gh)"; exit 1; }'
+ExecStart=/bin/sh -c 'command -v mosh-server >/dev/null && command -v tmux >/dev/null && command -v fastfetch >/dev/null && command -v distrobox >/dev/null && command -v gh >/dev/null || { logger -t strix-verify -p err "shell/workbench tool missing (mosh/tmux/fastfetch/distrobox/gh)"; exit 1; }'
 ExecStart=/bin/sh -c 'test -f /usr/share/strix/claudebox/distrobox.ini || { logger -t strix-verify -p err "claudebox manifest missing"; exit 1; }'
 # R4d: runtime key-sync armed. R11: auto-update timer armed.
 ExecStart=/bin/sh -c 'systemctl is-active --quiet strix-keys-sync.timer || { logger -t strix-verify -p err "strix-keys-sync.timer not active"; exit 1; }'
