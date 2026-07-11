@@ -54,18 +54,29 @@ COPY sysroot/ /
 #   firstboot        : gh (device-flow pull of firstboot.yaml, R12),
 #                      python3 + python3-pyyaml (parse firstboot.yaml)
 #   net tooling      : ethtool (tailscale-udp-gro unit)
+#   ops (A6)         : smartmontools (smartd — the only thing watching the
+#                      "permanent" 4 TB drive's health; journal alerts),
+#                      tcpdump+mtr (router 2am kit — real-root raw sockets,
+#                      the class the rootless claudebox can't do),
+#                      pcp+cockpit-pcp (historical metrics in Cockpit),
+#                      cockpit-storaged (storage UI incl. SMART readouts),
+#                      rsync (data-drive plumbing), bash-completion,
+#                      policycoreutils-python-utils (semanage — applying
+#                      SELinux fixes that cockpit-selinux only reports)
 RUN dnf -y --setopt=install_weak_deps=False install \
         mt7xxx-firmware wireless-regdb NetworkManager-wifi wpa_supplicant \
         tailscale \
         cockpit-bridge cockpit-system cockpit-ws cockpit-podman \
         cockpit-networkmanager cockpit-files cockpit-ostree \
-        cockpit-selinux cockpit-machines \
+        cockpit-selinux cockpit-machines cockpit-storaged cockpit-pcp \
         qemu-kvm-core libvirt-daemon-driver-qemu libvirt-daemon-driver-network \
         libvirt-daemon-driver-nodedev libvirt-daemon-driver-storage-core \
         libvirt-daemon-config-network libvirt-dbus libvirt-client virt-install \
         swtpm edk2-ovmf qemu-device-usb-host qemu-device-usb-redirect \
         tmux mosh fastfetch distrobox flatpak-session-helper gh \
         python3 python3-pyyaml ethtool \
+        smartmontools tcpdump mtr pcp rsync bash-completion \
+        policycoreutils-python-utils \
     && dnf clean all \
     && rm -rf /var/log/* /var/cache/* /var/lib/dnf
 
@@ -109,6 +120,7 @@ RUN systemctl enable \
         strix-postinstall-verify.service tailscale-udp-gro.service \
         cockpit-tailnet-serve.service \
         strix-table100.timer strix-keys-sync.timer \
+        smartd.service pmcd.service pmlogger.service \
     && systemctl --global enable claudebox-rebuild-daily.timer podman.socket
 # (--global podman.socket: every user gets a rootless podman API socket at
 #  /run/user/<uid>/podman/podman.sock — the claudebox CONTAINER_HOST bridge.)
