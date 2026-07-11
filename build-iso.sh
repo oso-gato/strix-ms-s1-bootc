@@ -33,7 +33,7 @@ IMAGE_REF="${IMAGE_REF:-ghcr.io/oso-gato/strix-ms-s1-bootc:stable}"
 # flagged legacy upstream — see BUILD-SPEC watch-items for the bootc-installer
 # migration). Digest = :latest as of 2026-07-11; bump deliberately.
 BIB_IMAGE="${BIB_IMAGE:-quay.io/centos-bootc/bootc-image-builder@sha256:2b52843ea2bfda73b0a08d97e76b734393b1d3a804681b9fabb26723bd3a2f0b}"
-KEYS_URL="https://github.com/oso-gato.keys"
+KEYS_URL="${KEYS_URL:-https://github.com/oso-gato.keys}"   # env-overridable (VM validation injects an ephemeral key)
 KEYS_OWNER="oso-gato"
 # SHA256 fingerprint-prefix → friendly tag (hashes only, never key material).
 KEY_TAGS_JSON='{"lzwcN0O7rzVy":"oSo","ozn1vY4/uPFX":"Alchemist","Kc4nBP37wttj":"Fatima"}'

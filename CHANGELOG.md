@@ -1,9 +1,12 @@
 # Changelog
 
-## v0.9.0 — 2026-07-11
+## v0.1.0 — 2026-07-12
 
-Pre-1.0 series (amendment A2: v1.0 held while the operator's remaining
-program list lands; the briefly-published v1.0.0 release was withdrawn).
+Pre-validation series (operator re-designation: nothing has booted on the
+live host yet, so the version says so — 0.9.x implied maturity the build
+had not earned; the v0.9.x and v1.0.0 tags were withdrawn). Graduates
+toward 1.0 only through VM validation (validation/) and then live-host
+validation.
 Adds A1: fastfetch banner on every ssh/mosh login. Adds A3:
 flatpak-session-helper (host) + bubblewrap/socat (claudebox) — box→host
 bridge + sandbox groundwork for the future apparatus role. Adds A4:

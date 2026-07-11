@@ -1,0 +1,60 @@
+# strix VM validation — BUILD-SPEC §6 as CI. Builds TEST-variant ISOs (QEMU
+# disk identity + ephemeral SSH key are the only deltas from the shipped
+# artifact; the diff is printed in the log), then installs and boots them in
+# KVM VMs on the runner (/dev/kvm is enabled on GitHub's Linux runners):
+# wipe install → first-boot assertion battery → preserve cycle (data
+# survives) → two guard-halt phases (blank + wrong-size drives stay
+# untouched). Nothing is published; this workflow only proves or disproves.
+name: validate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vm-validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free runner disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Prepare rootful podman storage (issue #446 workaround)
+        run: |
+          set -euo pipefail
+          sudo rm -rf /var/lib/containers/storage
+          sudo mkdir -p /etc/containers
+          printf '[storage]\ndriver = "overlay"\nrunroot = "/run/containers/storage"\ngraphroot = "/var/lib/containers/storage"\n' \
+            | sudo tee /etc/containers/storage.conf >/dev/null
+
+      - name: Install QEMU/KVM tooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils ovmf
+          test -e /dev/kvm || { echo "no /dev/kvm on this runner"; exit 1; }
+          ls -la /dev/kvm
+
+      - name: Run VM validation (5 phases)
+        run: |
+          set -euo pipefail
+          ./validation/vm-validate.sh
+
+      - name: Upload serial/console logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validate-logs
+          path: |
+            output/validate/serial-*.log
+          if-no-files-found: ignore
