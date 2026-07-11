@@ -19,6 +19,11 @@ text
 lang en_US.UTF-8
 keyboard us
 timezone UTC --utc
+# Pin the hostname at install (VM validation caught /etc/hostname not being
+# 'strix' post-install — Anaconda writes /etc/hostname, overriding the image's
+# copy under bootc's /etc merge). Belt-and-suspenders with the image's
+# /etc/hostname; both say strix.
+network --hostname=strix
 
 # R5/D3: root locked (no password ever); core UID 1000, wheel (sudo) +
 # libvirt (virsh/cockpit-machines system connection). Password field locked

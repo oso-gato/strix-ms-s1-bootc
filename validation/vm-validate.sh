@@ -133,7 +133,15 @@ vssh() {
 wait_ssh() {
   local t=0
   while [ "$t" -lt 600 ]; do
-    vssh true 2>/dev/null && return 0
+    if vssh true 2>/dev/null; then
+      # The ephemeral validation key is NOT on github.com/oso-gato.keys, so
+      # strix-keys-sync (OnBootSec=2min, working as designed) would replace
+      # authorized_keys and evict our key mid-run. Stop it the instant SSH is
+      # up — well inside the 2-min window — so validation stays deterministic
+      # WITHOUT altering the shipped image.
+      vssh 'sudo systemctl stop strix-keys-sync.timer strix-keys-sync.service' 2>/dev/null || true
+      return 0
+    fi
     sleep 10; t=$((t + 10))
   done
   return 1
@@ -166,7 +174,8 @@ wait_ssh || fail "phase 2: SSH by key never came up (home seed / sshd / keys bro
 pass "phase 2: SSH by injected key works (home-seed + key path proven)"
 scp -P "$SSH_PORT" -i "$WORK/valkey" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o LogLevel=ERROR "$HERE/validation/assert-in-vm.sh" core@127.0.0.1:/tmp/assert-in-vm.sh
-vssh 'sudo bash /tmp/assert-in-vm.sh' || fail "phase 2: in-VM assertion battery failed (see output above)"
+KEYBODY=$(awk '{print $2}' "$WORK/valkey.pub")
+vssh "sudo bash /tmp/assert-in-vm.sh '$KEYBODY'" || fail "phase 2: in-VM assertion battery failed (see output above)"
 vssh 'touch ~/VALIDATION-MARKER && sync'
 vssh 'sudo poweroff' 2>/dev/null || true
 while kill -0 "$QEMU_PID" 2>/dev/null; do sleep 5; done

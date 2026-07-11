@@ -8,6 +8,11 @@
 set -uo pipefail
 export LC_ALL=C
 
+# $1 (optional): the ephemeral validation key BODY (base64 field only). The
+# builder rewrites every key's COMMENT to a provenance tag, so we assert on
+# the body, not the injected comment.
+KEYBODY="${1:-}"
+
 FAILS=0
 ok()   { printf '  ok   %s\n' "$*"; }
 bad()  { printf '  FAIL %s\n' "$*"; FAILS=$((FAILS + 1)); }
@@ -29,7 +34,11 @@ chk "strix-log 60-90 GiB"     sh -c 's=$(lsblk -bno SIZE $(readlink -f /dev/disk
 echo "── R4/R5: identity, keys, sudo, sshd ──"
 chk "core UID 1000 GID 1000"             sh -c '[ "$(id -u core)" = 1000 ] && [ "$(id -g core)" = 1000 ]'
 chk "core in wheel+libvirt"              sh -c 'id -nG core | grep -q wheel && id -nG core | grep -q libvirt'
-chk "authorized_keys carries validation key" grep -q strix-validation-ephemeral /var/home/core/.ssh/authorized_keys
+if [ -n "$KEYBODY" ]; then
+  chk "authorized_keys carries the injected key (by body)" grep -qF "$KEYBODY" /var/home/core/.ssh/authorized_keys
+else
+  chk "authorized_keys has >=1 valid key" sh -c 'ssh-keygen -lf /var/home/core/.ssh/authorized_keys'
+fi
 chk "root password locked"               sh -c 'getent shadow root | cut -d: -f2 | grep -Eq "^[!*]"'
 chk "bootstrap NOPASSWD present (pre-setup)" test -f /etc/sudoers.d/strix-bootstrap
 chk "sshd: PasswordAuthentication no"    sh -c 'sshd -T 2>/dev/null | grep -qi "^passwordauthentication no"'
@@ -67,16 +76,23 @@ chk "hostname strix"                     sh -c '[ "$(cat /etc/hostname)" = strix
 chk "ip forwarding sysctls live"         sh -c '[ "$(sysctl -n net.ipv4.ip_forward)" = 1 ] && [ "$(sysctl -n net.ipv6.conf.all.forwarding)" = 1 ]'
 
 echo "── expected-in-VM divergences (hardware absent; live-host checklist) ──"
-# strix-postinstall-verify SHOULD be failed here — and at the bond assertion,
-# nothing earlier (mounts/bind pass above prove the earlier assertions fine).
+# strix-postinstall-verify SHOULD fail in a VM — at the bond0 assertion, with
+# every earlier (non-hardware) assertion having passed. Wait for it to reach a
+# terminal state first (it has a long After= chain; judging it mid-activation
+# was a harness bug).
+for _ in $(seq 1 30); do
+  st=$(systemctl show -p ActiveState --value strix-postinstall-verify.service 2>/dev/null)
+  [ "$st" = activating ] || [ "$st" = inactive ] || break
+  sleep 4
+done
 if systemctl is-failed --quiet strix-postinstall-verify.service; then
   if journalctl -t strix-verify -b --no-pager 2>/dev/null | grep -q 'bond0 missing'; then
     ok "verify unit failed exactly at the bond0 hardware assertion (expected in VM)"
   else
-    bad "verify unit failed BEFORE the bond0 assertion — non-hardware failure: $(journalctl -t strix-verify -b --no-pager | tail -3)"
+    bad "verify unit failed BEFORE bond0 — non-hardware failure: $(journalctl -t strix-verify -b --no-pager | tail -3)"
   fi
 else
-  bad "verify unit did not fail in a VM without bond NICs — assertions not running?"
+  bad "verify unit not in failed state (ActiveState=$(systemctl show -p ActiveState --value strix-postinstall-verify.service)); recent strix-verify: $(journalctl -t strix-verify -b --no-pager | tail -2)"
 fi
 systemctl is-active --quiet smartd.service \
   && ok "smartd active (QEMU NVMe exposes SMART)" \
@@ -84,6 +100,14 @@ systemctl is-active --quiet smartd.service \
 
 echo ""
 if [ "$FAILS" -gt 0 ]; then
+  echo "── diagnostics for the failing units (auto-dumped on any FAIL) ──"
+  for u in pmcd pmlogger pmproxy strix-postinstall-verify smartd; do
+    echo "### $u.service"
+    systemctl --no-pager --full status "$u.service" 2>&1 | head -12 || true
+    journalctl -u "$u.service" -b --no-pager 2>/dev/null | tail -8 || true
+  done
+  echo "### /etc/hostname = [$(cat /etc/hostname 2>/dev/null)]  hostnamectl=[$(hostnamectl --static 2>/dev/null)]"
+  echo "### ls -la /var/log/pcp"; ls -la /var/log/pcp 2>&1 | head
   echo "ASSERT-IN-VM: $FAILS FAILURE(S)"
   exit 1
 fi
