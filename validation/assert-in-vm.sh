@@ -17,6 +17,9 @@ FAILS=0
 ok()   { printf '  ok   %s\n' "$*"; }
 bad()  { printf '  FAIL %s\n' "$*"; FAILS=$((FAILS + 1)); }
 chk()  { local d="$1"; shift; if "$@" >/dev/null 2>&1; then ok "$d"; else bad "$d"; fi; }
+# Wait up to ~120s for a unit to go active (Type=notify daemons like pmcd
+# rebuild their PMNS on first start and are not active the instant SSH is up).
+wait_active() { local u="$1" i; for i in $(seq 1 60); do systemctl is-active --quiet "$u" && return 0; sleep 2; done; return 1; }
 
 echo "── R9: data mounts by UUID + A12 sizes ──"
 chk "/var/home on strix-home"            sh -c '[ "$(findmnt -no UUID /var/home)" = "e3b1c7a5-2f4d-4b8e-9c6a-1d5f7e9b3a21" ]'
@@ -67,10 +70,13 @@ chk "fastfetch drop-in present (A1)"     test -f /etc/profile.d/zz-fastfetch.sh
 echo "── R11/R13: updates + daemons ──"
 chk "bootc tracks ghcr ref"              sh -c 'bootc status 2>/dev/null | grep -q "ghcr.io/oso-gato/strix-ms-s1-bootc"'
 chk "bootc auto-update timer active"     systemctl is-active --quiet bootc-fetch-apply-updates.timer
-chk "keys-sync timer active"             systemctl is-active --quiet strix-keys-sync.timer
-chk "pmcd active"                        systemctl is-active --quiet pmcd.service
-chk "pmlogger active"                    systemctl is-active --quiet pmlogger.service
-chk "pmproxy active"                     systemctl is-active --quiet pmproxy.service
+# keys-sync: assert ENABLED (baked in), not active — the harness deliberately
+# stops the timer at SSH-up so the off-GitHub ephemeral key survives the run.
+chk "keys-sync timer enabled"            systemctl is-enabled --quiet strix-keys-sync.timer
+# pcp trio: wait for the slow Type=notify startup (PMNS rebuild) to settle.
+chk "pmcd active"                        wait_active pmcd.service
+chk "pmlogger active"                    wait_active pmlogger.service
+chk "pmproxy active"                     wait_active pmproxy.service
 chk "tailscaled enabled"                 systemctl is-enabled --quiet tailscaled.service
 chk "hostname strix"                     sh -c '[ "$(cat /etc/hostname)" = strix ]'
 chk "ip forwarding sysctls live"         sh -c '[ "$(sysctl -n net.ipv4.ip_forward)" = 1 ] && [ "$(sysctl -n net.ipv6.conf.all.forwarding)" = 1 ]'
