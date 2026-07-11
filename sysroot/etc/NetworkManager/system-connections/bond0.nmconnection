@@ -4,6 +4,7 @@ type=bond
 interface-name=bond0
 autoconnect=true
 autoconnect-priority=200
+mdns=2
 
 [bond]
 mode=802.3ad

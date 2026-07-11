@@ -123,14 +123,22 @@ jobs:
             Image: ghcr.io/oso-gato/strix-ms-s1-bootc:stable (also tagged ${{ steps.ver.outputs.version }})
             Installed systems track :stable via bootc auto-updates.
 
-            Assets are SPLIT (GitHub caps release assets at 2 GiB). Reassemble, verify, flash:
+            Assets are SPLIT (GitHub caps release assets at 2 GiB). Download the parts
+            for the variant you need, reassemble, verify (run only the block for the
+            variant you downloaded — a cat with no parts present creates a bogus file):
+
+            PRESERVE (reinstalls the OS, KEEPS the 4 TB data drive — match-or-halt):
 
                 cat strix-preserve.iso.part* > strix-preserve.iso
-                cat strix-wipe.iso.part*     > strix-wipe.iso
-                sha256sum -c SHA256SUMS --ignore-missing   # (macOS: shasum -a 256 -c)
+                sha256sum -c SHA256SUMS --ignore-missing
+                # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing
 
-            - strix-preserve.iso — reinstalls the OS, KEEPS the 4 TB data drive (match-or-halt).
-            - strix-wipe.iso     — reinstalls the OS, RECREATES the 4 TB data drive (first install / migration from noir).
+            WIPE (reinstalls the OS, RECREATES the 4 TB data drive — first install /
+            migration from noir):
+
+                cat strix-wipe.iso.part* > strix-wipe.iso
+                sha256sum -c SHA256SUMS --ignore-missing
+                # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing
 
             No credentials are baked; first boot: `ssh core@strix && sudo strix-setup`.
           files: |

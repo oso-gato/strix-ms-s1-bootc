@@ -12,6 +12,10 @@ Wants=network-online.target
 # job releases immediately — loud failure on a genuinely absent drive stays.
 After=network-online.target NetworkManager.service strix-firstboot-setup.service
 After=var-home.mount var-lib-containers.mount var-lib-libvirt.mount var-log.mount etc-libvirt.mount
+# Ordering-only edges to the asserted daemons (no Wants/Requires): a failed
+# daemon job releases the edge immediately, so genuine breakage still fails
+# loudly — but a healthy Type=notify startup can't race the assertion.
+After=smartd.service pmcd.service pmlogger.service pmproxy.service
 
 [Service]
 Type=oneshot

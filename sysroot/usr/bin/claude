@@ -1,39 +1,51 @@
 #!/usr/bin/env bash
 # claude — host wrapper: every session runs INSIDE the claudebox distrobox
 # (R8; the host never runs claude-code). Behavior:
-#   * box missing            -> build it first (blocks with progress).
-#   * rebuild in progress    -> follow its log, then continue into a session.
-#   * daily refresh came due while you worked -> rebuild NOW on session exit.
-#   * holds a SHARED session lock so claudebox-daily defers while you work.
+#   * rebuild in progress -> follow its log; if it FAILED, retry one full
+#     rebuild before refusing (box state is unpoliced after a partial rm).
+#   * box missing         -> build it first (blocks with progress).
+#   * session lock        -> held SHARED across the WHOLE session phase
+#     (including 125/126 retries), so claudebox-daily/rebuild-run — which
+#     take it EXCLUSIVE — can never destroy the box mid-entry.
+#   * daily refresh came due while you worked -> rebuild fires on exit.
 # Model policy (D11): --model default = Claude Code's RECOMMENDED alias —
-# never a fixed pin; a client update moves the model with it. ultracode is
-# session-scoped, so the wrapper is the only place it can be defaulted.
+# never a fixed pin. ultracode is session-scoped: wrapper-only.
 set -uo pipefail
-# Unconditional pin (P4 review): an inherited XDG_RUNTIME_DIR from `su -` /
-# `sudo -iu core` would aim rootless podman + systemctl --user at the wrong
-# runtime dir.
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 state="$HOME/.local/state/claudebox"; mkdir -p "$state"
+run=claudebox-rebuild-run.service
 
-if systemctl --user is-active --quiet claudebox-rebuild-run.service 2>/dev/null \
-   || [ "$(systemctl --user show -p ActiveState --value claudebox-rebuild-run.service 2>/dev/null)" = "activating" ]; then
-    /usr/bin/claudebox-rebuild --watch-only || true
-fi
+rebuild_state() { systemctl --user show -p ActiveState --value "$run" 2>/dev/null; }
 
+# ── Phase 1: rebuilds (NO lock held — the rebuild itself takes it exclusive,
+# so holding shared here would deadlock the rebuild we're waiting for). ──────
+case "$(rebuild_state)" in
+  activating|active)
+    if ! /usr/bin/claudebox-rebuild --watch-only; then
+        echo ">> in-progress rebuild failed — retrying one full rebuild…"
+        /usr/bin/claudebox-rebuild || {
+            echo ">> claudebox unusable — inspect: journalctl --user -u $run" >&2
+            exit 1
+        }
+    fi
+    ;;
+esac
 if ! podman container exists claudebox 2>/dev/null; then
     echo ">> claudebox does not exist yet — building it (first run, ~2-5 min)…"
-    /usr/bin/claudebox-rebuild
+    /usr/bin/claudebox-rebuild || exit 1
 fi
 
-# Hold a SHARED session lock for the session's lifetime. Retry ONLY the
-# OCI/exec-setup failures (125/126 — the transient post-rebuild /dev/pts
-# race); a real claude exit code passes through untouched (P4 review).
+# ── Phase 2: session, under the shared lock for its entire lifetime. ────────
+exec 8>"$state/session.lock"
+flock -s 8
 run_session() {
     local tries=0 rc
     while :; do
-        flock -s "$state/session.lock" distrobox enter claudebox -- bash -lc \
+        distrobox enter claudebox -- bash -lc \
             'exec /usr/bin/claude --model default --settings "{\"ultracode\":true}" "$@"' bash "$@"
         rc=$?
+        # Retry ONLY OCI/exec-setup failures (125/126 — transient
+        # post-rebuild /dev/pts race); real exit codes pass through.
         if [ "$rc" -ne 125 ] && [ "$rc" -ne 126 ]; then
             return "$rc"
         fi
@@ -44,12 +56,12 @@ run_session() {
 }
 run_session "$@"
 rc=$?
+exec 8>&-   # release before probing
 
-# Deferred daily refresh: fire it now that the session ended (idle check via
-# the lock — another live session keeps deferring).
+# ── Phase 3: deferred daily refresh fires now that the session ended. ───────
 if [ -e "$state/rebuild.pending" ] && flock -n -x "$state/session.lock" -c true 2>/dev/null; then
     rm -f "$state/rebuild.pending"
     echo ">> a daily claudebox refresh came due while you were working — rebuilding now…"
-    systemctl --user start --no-block claudebox-rebuild-run.service
+    systemctl --user start --no-block "$run"
 fi
 exit $rc

@@ -5,17 +5,22 @@
 #   Type=exec        — the start job completes at spawn; the boot never waits.
 #   keypress gate    — the flock is only taken once a human presses ENTER at
 #                      the console; until then the SSH path is uncontested.
-# strix-setup's flock + sentinel still arbitrate if both engage.
+# Delta-review hardening: After=getty@tty1.service orders us past the getty
+# stop job's trailing TTYVHangup (Conflicts= alone carries no ordering), and
+# ExecStopPost restores a getty on tty1 when the gated shell exits for any
+# reason — the console is never dead until reboot.
+# strix-setup's flock + sentinel still arbitrate if both paths engage.
 [Unit]
 Description=strix interactive first-boot setup on tty1 (keypress-gated)
 ConditionPathExists=!/var/home/.strix-secrets/.setup-done
 ConditionPathExists=/dev/tty1
-After=strix-firstboot-setup.service getty.target
+After=strix-firstboot-setup.service getty.target getty@tty1.service
 Conflicts=getty@tty1.service
 
 [Service]
 Type=exec
 ExecStart=/bin/sh -c 'printf "\\n  strix first-boot setup — press ENTER to run it on this console\\n  (or ssh core@strix && sudo strix-setup from another machine)\\n\\n"; read -r _ && exec /usr/bin/strix-setup'
+ExecStopPost=/usr/bin/systemctl start --no-block getty@tty1.service
 StandardInput=tty
 StandardOutput=tty
 StandardError=tty

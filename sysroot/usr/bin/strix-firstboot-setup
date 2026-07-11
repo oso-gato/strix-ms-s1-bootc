@@ -32,6 +32,20 @@ install -d -m 0755 /var/lib/strix
 # One-time cleanup of the retired per-boot marker (pre-review design).
 rm -f "$SECRETS/.setup-done-applied" 2>/dev/null || true
 
+# Shadow-field lock classifier (delta review): locked/absent = empty or
+# '!'/'*'-prefixed ('!!' kickstart lock, '!<hash>' passwd -l, '*'). Used by
+# BOTH the restore gate (only restore into a locked/empty field) and the
+# snapshot guard (never persist a locked/empty field — a preserved '!$y$...'
+# would restore an un-sudo-able box after the flip already removed NOPASSWD).
+hash_locked_or_empty() {
+  case "$1" in ""|"!"*|"*"*) return 0 ;; *) return 1 ;; esac
+}
+# Tailscale identity heuristic (belt-and-braces behind the Before=tailscaled
+# ordering): a bootstrap '{}' or logged-out state carries no profiles.
+ts_has_identity() {
+  [ -s "$TS_STATE" ] && grep -q '_profiles' "$TS_STATE"
+}
+
 # ── (1) Setup finished: tear down the prompt surface, ENFORCE the sudo flip ──
 if [ -f "$SETUP_DONE" ]; then
   rm -f "$MOTD"
@@ -47,7 +61,7 @@ if [ -d "$SECRETS" ] && [ -f "$SETUP_DONE" ] && [ ! -f "$RESTORE_DONE" ]; then
   # with --lock on every reinstall; a set password is live state — keep it).
   if [ -f "$SECRETS/core.hash" ]; then
     cur=$(getent shadow core | cut -d: -f2)
-    if printf '%s' "$cur" | grep -Eq '^[!*]*$'; then
+    if hash_locked_or_empty "$cur" && ! hash_locked_or_empty "$(cat "$SECRETS/core.hash")"; then
       usermod -p "$(cat "$SECRETS/core.hash")" core
       logger -t strix-firstboot-setup -p notice "restored core password hash"
     fi
@@ -68,12 +82,15 @@ if [ -d "$SECRETS" ] && [ -f "$SETUP_DONE" ] && [ ! -f "$RESTORE_DONE" ]; then
     logger -t strix-firstboot-setup -p notice "restored Wi-Fi keyfiles and reloaded NetworkManager"
   fi
 
-  # Tailscale node identity: only when the daemon has no state of its own.
-  if [ -f "$SECRETS/tailscaled.state" ] && [ ! -f "$TS_STATE" ]; then
+  # Tailscale node identity: this unit runs Before=tailscaled.service, so
+  # the daemon's first start reads the restored state — no restart needed
+  # (a blocking restart here would deadlock against our own Before= edge).
+  # The ts_has_identity guard also treats a daemon-bootstrapped '{}' as
+  # absent, so an ordering regression can never block the restore.
+  if [ -f "$SECRETS/tailscaled.state" ] && ! ts_has_identity; then
     install -d -m 0700 "$(dirname "$TS_STATE")"
     install -m 0600 -o root -g root "$SECRETS/tailscaled.state" "$TS_STATE"
-    systemctl restart tailscaled
-    logger -t strix-firstboot-setup -p notice "restored tailscaled.state; rejoining tailnet"
+    logger -t strix-firstboot-setup -p notice "restored tailscaled.state before tailscaled first start (tailnet rejoin)"
   fi
 
   touch "$RESTORE_DONE"
@@ -83,7 +100,7 @@ fi
 # ── (3) SNAPSHOT REFRESH — steady state keeps the persisted copies current ───
 if [ -f "$SETUP_DONE" ] && [ -f "$RESTORE_DONE" ]; then
   cur=$(getent shadow core | cut -d: -f2)
-  if [ -n "$cur" ] && ! printf '%s' "$cur" | grep -Eq '^[!*]*$'; then
+  if ! hash_locked_or_empty "$cur"; then
     printf '%s\n' "$cur" > "$SECRETS/core.hash.new"
     chmod 0600 "$SECRETS/core.hash.new"
     mv -f "$SECRETS/core.hash.new" "$SECRETS/core.hash"
@@ -92,7 +109,9 @@ if [ -f "$SETUP_DONE" ] && [ -f "$RESTORE_DONE" ]; then
     src="$NM_DIR/wifi-$slot.nmconnection"
     [ -f "$src" ] && install -m 0600 -o root -g root "$src" "$SECRETS/wifi-$slot.nmconnection"
   done
-  if [ -f "$TS_STATE" ]; then
+  # Never snapshot an identity-less state file (bootstrap '{}' / logged-out)
+  # — a skipped restore must not be followed by a clobbering snapshot.
+  if ts_has_identity; then
     install -m 0600 -o root -g root "$TS_STATE" "$SECRETS/tailscaled.state"
   fi
   logger -t strix-firstboot-setup -p info "credential snapshot refreshed on the data drive"

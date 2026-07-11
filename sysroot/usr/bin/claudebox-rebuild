@@ -10,7 +10,22 @@ run=claudebox-rebuild-run.service
 
 state_of() { systemctl --user show -p ActiveState --value "$run" 2>/dev/null; }
 
-if [ "${1:-}" != "--watch-only" ]; then
+if [ "${1:-}" = "--watch-only" ]; then
+    # Entry semantics (delta review): only meaningful when a rebuild is
+    # actually running — never report "complete" for a rebuild that never
+    # ran, and surface an already-failed one instead of swallowing it.
+    case "$(state_of)" in
+        activating|active) : ;;
+        *)
+            if systemctl --user is-failed --quiet "$run"; then
+                echo ">> last claudebox rebuild FAILED — inspect: journalctl --user -u $run" >&2
+                exit 1
+            fi
+            echo ">> no claudebox rebuild in progress."
+            exit 0
+            ;;
+    esac
+else
     systemctl --user reset-failed "$run" 2>/dev/null || true
     echo ">> claudebox: starting rebuild — fresh image + latest Claude Code (~2-5 min)…"
     systemctl --user start --no-block "$run"

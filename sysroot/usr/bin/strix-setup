@@ -113,16 +113,24 @@ case "$MODE" in
   *) : ;;
 esac
 
+# set-e-safe parse with explicit failure detection (delta review): a
+# malformed/empty firstboot.yaml must fall back to interactive, never
+# silently skip the Wi-Fi slots behind a misleading "[skip]".
 if [ "$PULLED" = 1 ]; then
-  while IFS=$'\t' read -r k v; do
-    case "$k" in
-      HASH) P_HASH="$v" ;;
-      TSKEY) P_TS_KEY="$v" ;;
-      SSID_*) P_SSID["${k#SSID_}"]="$v" ;;
-      PSK_*)  P_PSK["${k#PSK_}"]="$v" ;;
-    esac
-  done < <(parse_yaml)
-  echo "[ok] pulled firstboot.yaml from $AK_REPO"
+  if ! parsed=$(parse_yaml) || [ -z "$parsed" ]; then
+    echo "[warn] firstboot.yaml unparseable or empty — falling back to interactive." >&2
+    PULLED=0
+  else
+    while IFS=$'\t' read -r k v; do
+      case "$k" in
+        HASH) P_HASH="$v" ;;
+        TSKEY) P_TS_KEY="$v" ;;
+        SSID_*) P_SSID["${k#SSID_}"]="$v" ;;
+        PSK_*)  P_PSK["${k#PSK_}"]="$v" ;;
+      esac
+    done <<<"$parsed"
+    echo "[ok] pulled firstboot.yaml from $AK_REPO"
+  fi
 fi
 
 # ── (1) Core password (R5: gates sudo + Cockpit only, never sshd) ────────────

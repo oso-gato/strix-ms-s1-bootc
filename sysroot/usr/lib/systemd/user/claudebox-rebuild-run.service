@@ -1,12 +1,19 @@
 # The actual claudebox rebuild: destroy + recreate from the pinned manifest,
 # then re-apply the host bridges + managed settings (claudebox-init.sh).
 # Detached user service so it outlives the box it recreates and any terminal.
+# Runs under an EXCLUSIVE flock on the session lock (delta review): a live
+# claude session holds it SHARED for its whole lifetime, so the destroy can
+# never fire mid-session — the rebuild blocks (with a journal note) until
+# the session ends.
 [Unit]
 Description=Rebuild the claudebox distrobox (destroy + recreate from manifest)
 
 [Service]
 Type=oneshot
-TimeoutStartSec=30min
-ExecStart=/bin/sh -c 'distrobox rm -f claudebox 2>/dev/null || true; \
-  distrobox assemble create --file /usr/share/strix/claudebox/distrobox.ini && \
-  /usr/share/strix/claudebox/claudebox-init.sh'
+TimeoutStartSec=45min
+ExecStart=/bin/sh -c 'mkdir -p "$HOME/.local/state/claudebox"; \
+  echo "waiting for exclusive session lock (any live claude session defers us)…"; \
+  exec flock -x "$HOME/.local/state/claudebox/session.lock" /bin/sh -c \
+    "distrobox rm -f claudebox 2>/dev/null || true; \
+     distrobox assemble create --file /usr/share/strix/claudebox/distrobox.ini && \
+     /usr/share/strix/claudebox/claudebox-init.sh"'

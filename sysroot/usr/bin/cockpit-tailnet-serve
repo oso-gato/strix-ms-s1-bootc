@@ -45,15 +45,23 @@ if [ -f "$conf" ] && grep -qF "https://${fqdn}" "$conf"; then
     echo "cockpit-serve: already published at https://${fqdn}/ (Origins current)"
     exit 0
 fi
-install -D -m0644 /dev/stdin "$conf" <<EOF
+# Atomic rewrite (temp file + rename on the same fs, -Z restores the SELinux
+# label) — a non-atomic write could race strix-postinstall-verify's LoginTo
+# grep on the same boot. localhost origins included so SSH-tunnel access
+# (ssh -L 9090:localhost:9090) keeps working; strix.local works because
+# bond0 announces mDNS (mdns=2 in its keyfile).
+tmp=$(mktemp /etc/cockpit/.cockpit.conf.XXXXXX)
+cat > "$tmp" <<EOF
 [WebService]
 ; Written by cockpit-tailnet-serve (A4). R6 hardening preserved verbatim;
-; Origins added for the tailnet-served name + LAN names (setting Origins
-; replaces the default host-match — raw-IP URLs will be rejected).
+; Origins added for the tailnet-served name + LAN/loopback names (setting
+; Origins replaces the default host-match — raw-IP URLs will be rejected).
 LoginTo = false
 AllowUnencrypted = false
 MaxStartups = 10
-Origins = https://${fqdn} wss://${fqdn} https://strix:9090 wss://strix:9090 https://strix.local:9090 wss://strix.local:9090
+Origins = https://${fqdn} wss://${fqdn} https://strix:9090 wss://strix:9090 https://strix.local:9090 wss://strix.local:9090 https://localhost:9090 wss://localhost:9090
 EOF
+chmod 0644 "$tmp"
+mv -Z "$tmp" "$conf"
 systemctl try-restart cockpit || true   # best-effort; conf also re-read on next connection
 echo "cockpit-serve: published at https://${fqdn}/ (Origins set: ts.net + LAN names)"
