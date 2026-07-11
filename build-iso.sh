@@ -162,9 +162,13 @@ PY
     -v /var/lib/containers/storage:/var/lib/containers/storage \
     "$BIB_IMAGE" \
     --type anaconda-iso \
+    --rootfs xfs \
     --config /config.toml \
     --chown "$(id -u):$(id -g)" \
     "$IMAGE_REF"
+  # --rootfs xfs: fedora-bootc images declare no default root fs type (CI run
+  # 2: "no default root filesystem type specified in container"); matches the
+  # kickstart's `part / --fstype=xfs`.
   # --chown: BIB runs as root; without it the ISO lands root-owned and the
   # un-sudo'd mv below fails with EACCES after the whole build.
 
