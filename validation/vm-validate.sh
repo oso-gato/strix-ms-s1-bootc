@@ -78,9 +78,11 @@ pass "phase 0: test-variant ISOs built"
 # ─── VM plumbing ─────────────────────────────────────────────────────────────
 new_disk() { qemu-img create -q -f qcow2 "$1" "$2"; }   # sparse
 
+VM_SEQ=0
 vm() {
   # vm <mode:install|run|halt> <sysdisk> <datadisk> [iso]
   local mode="$1" sys="$2" data="$3" iso="${4:-}"
+  VM_SEQ=$((VM_SEQ + 1))   # per-invocation serial log (no $$ collisions across phases)
   local args=(
     -machine q35,accel=kvm -cpu host -smp 2 -m 4096
     -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE"
@@ -91,7 +93,7 @@ vm() {
     -device "nvme,drive=d1,serial=$DATA_SERIAL,bootindex=3"
     -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22"
     -device "virtio-net-pci,netdev=n0"
-    -display none -serial "file:$WORK/serial-$mode-$$.log"
+    -display none -serial "file:$WORK/serial-${VM_SEQ}-$mode.log"
   )
   if [ -n "$iso" ]; then
     args+=( -drive "file=$iso,if=none,id=cd0,format=raw,media=cdrom,readonly=on"
@@ -113,15 +115,19 @@ wait_install_exit() {  # PASS = qemu exits (kickstart 'reboot' + -no-reboot) wit
   return 0
 }
 
-expect_halt() {  # PASS = qemu still running after the window (guard held the install)
+settle_vm() {  # wait up to the window for the VM to exit on its own, else kill it.
+  # NO pass/fail judgment here — Anaconda's post-%pre-error behavior (sit at a
+  # prompt vs reboot) is version-dependent and an unreliable signal. The real
+  # halt assertion is "were the disks written?" (disk_blank), checked by the
+  # caller AFTER this returns. (Run-4 phase-5 taught this: qemu exited on a
+  # correct halt, and the old qemu-liveness heuristic misread it as a proceed.)
   local t=0
   while [ "$t" -lt "$HALT_WINDOW" ]; do
-    kill -0 "$QEMU_PID" 2>/dev/null || return 1   # exited => install proceeded => guard FAILED
+    kill -0 "$QEMU_PID" 2>/dev/null || return 0
     sleep 10; t=$((t + 10))
   done
   sudo kill -9 "$QEMU_PID" 2>/dev/null || true
   wait "$QEMU_PID" 2>/dev/null || true
-  return 0
 }
 
 vssh() {
@@ -199,8 +205,11 @@ say "phase 4: preserve ISO vs BLANK data drive → %pre must halt"
 new_disk data-blank.qcow2 4000000000000
 fresh_vars
 vm halt sys.qcow2 data-blank.qcow2 "$WORK/strix-preserve.iso"
-expect_halt || fail "phase 4: install PROCEEDED on a non-strix data drive — match-or-halt broken"
-disk_blank data-blank.qcow2 || fail "phase 4: blank data drive was WRITTEN during a halted preserve install"
+settle_vm
+# Ground truth: a halted %pre never reaches storage, so the data disk has no
+# partition table. (The system disk here already carries the phase-1 install,
+# so only the data disk is a meaningful check.)
+disk_blank data-blank.qcow2 || fail "phase 4: blank data drive was WRITTEN — preserve match-or-halt did not halt"
 pass "phase 4: preserve halted on unknown layout; data drive untouched"
 
 # ─── 5. Wipe guard: wrong-size data drive must HALT ──────────────────────────
@@ -209,9 +218,10 @@ new_disk sys-fresh.qcow2 2000000000000
 new_disk data-small.qcow2 1000000000000
 fresh_vars
 vm halt sys-fresh.qcow2 data-small.qcow2 "$WORK/strix-wipe.iso"
-expect_halt || fail "phase 5: install PROCEEDED with a wrong-size data drive — identity guard broken"
-disk_blank data-small.qcow2 || fail "phase 5: wrong-size data drive was written"
-disk_blank sys-fresh.qcow2 || fail "phase 5: system drive was written despite guard halt"
-pass "phase 5: guard held on wrong-size drive; nothing written"
+settle_vm
+# Ground truth: neither disk is touched when the identity guard halts pre-storage.
+disk_blank data-small.qcow2 || fail "phase 5: wrong-size data drive was WRITTEN — identity guard did not halt"
+disk_blank sys-fresh.qcow2   || fail "phase 5: system drive was WRITTEN despite the guard halt"
+pass "phase 5: guard held on wrong-size drive; neither disk written"
 
 say "ALL PHASES PASSED — build validated against BUILD-SPEC §6 / REQUIREMENTS"

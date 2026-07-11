@@ -59,4 +59,5 @@ jobs:
           name: validate-logs
           path: |
             output/validate/serial-*.log
+            output/validate/kickstart-*.ks
           if-no-files-found: ignore
