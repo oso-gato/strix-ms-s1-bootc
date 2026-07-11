@@ -96,6 +96,20 @@ jobs:
           set -euo pipefail
           ./build-iso.sh
 
+      # GitHub Release assets cap at 2 GiB; a bootc anaconda ISO embeds the
+      # whole image and exceeds it. Ship split parts + checksums; reassemble
+      # with `cat` (see release body / README).
+      - name: Split ISOs for the 2 GiB release-asset limit
+        run: |
+          set -euo pipefail
+          sha256sum strix-preserve.iso strix-wipe.iso > SHA256SUMS
+          for v in preserve wipe; do
+            split -b 1900M -d "strix-$v.iso" "strix-$v.iso.part"
+            rm "strix-$v.iso"
+          done
+          sha256sum strix-*.iso.part* >> SHA256SUMS
+          ls -lh strix-* SHA256SUMS
+
       - name: Publish Release
         # Pinned by commit SHA (v2 tag as of 2026-07-11) — this step holds
         # contents:write in a pipeline that feeds an auto-updating host OS.
@@ -109,11 +123,17 @@ jobs:
             Image: ghcr.io/oso-gato/strix-ms-s1-bootc:stable (also tagged ${{ steps.ver.outputs.version }})
             Installed systems track :stable via bootc auto-updates.
 
-            Assets:
+            Assets are SPLIT (GitHub caps release assets at 2 GiB). Reassemble, verify, flash:
+
+                cat strix-preserve.iso.part* > strix-preserve.iso
+                cat strix-wipe.iso.part*     > strix-wipe.iso
+                sha256sum -c SHA256SUMS --ignore-missing   # (macOS: shasum -a 256 -c)
+
             - strix-preserve.iso — reinstalls the OS, KEEPS the 4 TB data drive (match-or-halt).
             - strix-wipe.iso     — reinstalls the OS, RECREATES the 4 TB data drive (first install / migration from noir).
 
             No credentials are baked; first boot: `ssh core@strix && sudo strix-setup`.
           files: |
-            strix-preserve.iso
-            strix-wipe.iso
+            strix-preserve.iso.part*
+            strix-wipe.iso.part*
+            SHA256SUMS

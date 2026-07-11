@@ -32,7 +32,9 @@ strix succeeds [`noir-strix-halo-fcos`](https://github.com/oso-gato/noir-strix-h
 ## Quick start
 
 1. **Build** (or grab a Release): `./build-iso.sh` (rootful podman; `--local`
-   to build the image from the working tree).
+   to build the image from the working tree). Release assets come **split**
+   (GitHub's 2 GiB cap): `cat strix-wipe.iso.part* > strix-wipe.iso`, then
+   verify against `SHA256SUMS`.
 2. **Flash**: `sudo dd if=strix-wipe.iso of=/dev/rdiskN bs=4m status=progress`.
 3. **Boot it** — fully unattended install, auto-reboot, up on Ethernet with
    key-only SSH (keys = whatever `github.com/oso-gato.keys` published at build).
