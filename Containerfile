@@ -58,7 +58,10 @@ COPY sysroot/ /
 #                      "permanent" 4 TB drive's health; journal alerts),
 #                      tcpdump+mtr (router 2am kit — real-root raw sockets,
 #                      the class the rootless claudebox can't do),
-#                      pcp+cockpit-pcp (historical metrics in Cockpit),
+#                      pcp (pmcd/pmlogger collectors + pmproxy REST API —
+#                      Fedora 44 retired the cockpit-pcp package; the
+#                      metrics-history page ships in cockpit-system and
+#                      talks to pmproxy; verified against F44 repos),
 #                      cockpit-storaged (storage UI incl. SMART readouts),
 #                      rsync (data-drive plumbing), bash-completion,
 #                      policycoreutils-python-utils (semanage — applying
@@ -68,7 +71,7 @@ RUN dnf -y --setopt=install_weak_deps=False install \
         tailscale \
         cockpit-bridge cockpit-system cockpit-ws cockpit-podman \
         cockpit-networkmanager cockpit-files cockpit-ostree \
-        cockpit-selinux cockpit-machines cockpit-storaged cockpit-pcp \
+        cockpit-selinux cockpit-machines cockpit-storaged \
         qemu-kvm-core libvirt-daemon-driver-qemu libvirt-daemon-driver-network \
         libvirt-daemon-driver-nodedev libvirt-daemon-driver-storage-core \
         libvirt-daemon-config-network libvirt-dbus libvirt-client virt-install \
@@ -120,7 +123,7 @@ RUN systemctl enable \
         strix-postinstall-verify.service tailscale-udp-gro.service \
         cockpit-tailnet-serve.service \
         strix-table100.timer strix-keys-sync.timer \
-        smartd.service pmcd.service pmlogger.service \
+        smartd.service pmcd.service pmlogger.service pmproxy.service \
     && systemctl --global enable claudebox-rebuild-daily.timer podman.socket
 # (--global podman.socket: every user gets a rootless podman API socket at
 #  /run/user/<uid>/podman/podman.sock — the claudebox CONTAINER_HOST bridge.)

@@ -9,7 +9,7 @@ flatpak-session-helper (host) + bubblewrap/socat (claudebox) — box→host
 bridge + sandbox groundwork for the future apparatus role. Adds A4:
 cockpit-tailnet-serve — Cockpit at https://strix.<tailnet>.ts.net with a
 real TLS cert (LAN :9090 path unchanged; by-name access only once applied).
-Adds A6 (ops batch): smartmontools/smartd, tcpdump+mtr, pcp+cockpit-pcp,
+Adds A6 (ops batch): smartmontools/smartd, tcpdump+mtr, pcp (pmcd/pmlogger/pmproxy),
 cockpit-storaged, rsync, bash-completion, semanage. A7 records the declined
 set; restic backup pending a target decision.
 
