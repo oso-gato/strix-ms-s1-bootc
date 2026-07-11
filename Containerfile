@@ -48,6 +48,9 @@ COPY sysroot/ /
 #                      firewall-less host) + fastfetch (amendment A1: banner
 #                      on every ssh/mosh login, before the tmux attach)
 #   claudebox        : distrobox (box runtime; claude-code lives IN the box)
+#                      + flatpak-session-helper (A3: host-side helper backing
+#                      host-spawn — the box→host command bridge for the
+#                      workbench's host-maintenance role)
 #   firstboot        : gh (device-flow pull of firstboot.yaml, R12),
 #                      python3 + python3-pyyaml (parse firstboot.yaml)
 #   net tooling      : ethtool (tailscale-udp-gro unit)
@@ -61,7 +64,8 @@ RUN dnf -y --setopt=install_weak_deps=False install \
         libvirt-daemon-driver-nodedev libvirt-daemon-driver-storage-core \
         libvirt-daemon-config-network libvirt-dbus libvirt-client virt-install \
         swtpm edk2-ovmf qemu-device-usb-host qemu-device-usb-redirect \
-        tmux mosh fastfetch distrobox gh python3 python3-pyyaml ethtool \
+        tmux mosh fastfetch distrobox flatpak-session-helper gh \
+        python3 python3-pyyaml ethtool \
     && dnf clean all \
     && rm -rf /var/log/* /var/cache/* /var/lib/dnf
 

@@ -324,3 +324,4 @@ equivalents, migration note (one-time wipe). On ship: a reference-only banner PR
 |---|---|---|
 | A1 | 2026-07-11 | fastfetch runs on **every** interactive SSH/mosh login (banner before the tmux attach; suppressed inside tmux panes). Extends R4. |
 | A2 | 2026-07-11 | **v1.0 is held**: further programs are to be added before the 1.0 designation. Releases continue on a v0.9.x pre-series; the published v1.0.0 release/tag was withdrawn. |
+| A3 | 2026-07-11 | Host gains `flatpak-session-helper` (backs the box→host `host-spawn` bridge); claudebox gains `bubblewrap` (claude-code sandboxed-bash backend) + `socat` (host-bridge shims). Extends R8. Context: strix will eventually pair as the second autonomous dev-loop host + dev container; base-image groundwork only — the apparatus itself stays out of scope until its own frozen spec. |
