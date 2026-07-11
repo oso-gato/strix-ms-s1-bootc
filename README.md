@@ -22,7 +22,7 @@ strix succeeds [`noir-strix-halo-fcos`](https://github.com/oso-gato/noir-strix-h
   Local config (`/etc`) survives updates; `/var` is never touched.
 - **Install**: CI Releases carry two USB installers built from the same image:
   - `strix-wipe.iso` — first install / migration: recreates the 4 TB data
-    drive (home 2000 GiB · containers 750 GiB · vm 750 GiB · log rest).
+    drive (home 2000 GiB · containers 825 GiB · vm 825 GiB · log rest ≈ 75 GiB).
   - `strix-preserve.iso` — reinstall: keeps the data drive (match-or-halt);
     the box comes back with homes, containers, **VMs**, credentials, and
     tailnet identity intact.

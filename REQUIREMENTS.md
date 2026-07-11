@@ -220,9 +220,9 @@ UUIDs, in this order:
 | # | Label | Size | Mount |
 |---|---|---|---|
 | 1 | `strix-home` | 2000 GiB | `/var/home` |
-| 2 | `strix-containers` | 750 GiB | `/var/lib/containers` |
-| 3 | `strix-vm` | 750 GiB | `/var/lib/libvirt` (+ `etc-libvirt/` → `/etc/libvirt` bind) |
-| 4 | `strix-log` | remainder (~225 GiB) | `/var/log` |
+| 2 | `strix-containers` | 825 GiB *(A12)* | `/var/lib/containers` |
+| 3 | `strix-vm` | 825 GiB *(A12)* | `/var/lib/libvirt` (+ `etc-libvirt/` → `/etc/libvirt` bind) |
+| 4 | `strix-log` | remainder (~75 GiB) *(A12)* | `/var/log` |
 
 *(Implementation-fact refinement per the freeze header: "Label" = GPT
 partition name; XFS caps filesystem labels at 12 chars, so partition 2's
@@ -333,3 +333,4 @@ equivalents, migration note (one-time wipe). On ship: a reference-only banner PR
 | A9 | 2026-07-11 | **DECLINED**: restic/borgbackup for the data drive. The operator accepts the recorded risk: smartd warns of drive failure, but there is NO backup — drive loss = loss of homes, secrets, container volumes, and VM state. Preserve reinstalls protect against OS loss only. Revisit is a one-line ask. |
 | A10 | 2026-07-11 | Repo goes **PUBLIC**: git history rewritten to the `oso-gato` identity (personal name/hostnames removed from author fields; file contents verified clean); drive serials/subnet stay per the noir-established posture (hardware fingerprint, not credentials). ghcr package public so the box can pull auto-updates unauthenticated (R11). |
 | A11 | 2026-07-12 | Delta adversarial review (post-P4 code: fix implementations + A1–A7) — 12 confirmed findings applied, 0 refuted. Headline: strix-firstboot-setup now runs **Before=tailscaled.service** (the daemon bootstraps an empty state file at startup, which would have defeated the restore gate and let the snapshot refresh destroy the preserved tailnet identity); parse-failure fallback in pull mode; lock-classifier and identity-bearing-state guards; atomic cockpit.conf writes + localhost origins + mDNS responder on bond0 (`strix.local` now actually resolves); tty1 getty ordering + console restore; claude session lock held wrapper-wide with the rebuild taking it exclusive; per-variant ISO reassembly instructions. |
+| A12 | 2026-07-12 | **R9 layout amended** (pre-flash, so still a single wipe migration): containers 750→**825 GiB**, vm 750→**825 GiB**, log = remainder ≈ **75 GiB** (was ~225; steady-state need is ~4–8 GiB — journald self-caps, pcp culls at ~2 weeks). Home unchanged at 2000 GiB. UUIDs/labels/mounts unchanged. |

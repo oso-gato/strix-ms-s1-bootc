@@ -53,14 +53,16 @@ DATA_EXPECTED_SIZE_GB=3725
 DATA_EXPECTED_MODEL="SN850X 4000GB"
 SIZE_TOLERANCE_GB=50
 
-# strix data layout (R9/D7): sizes in MiB; log takes the remainder.
+# strix data layout (R9/D7 as amended by A12): sizes in MiB; log takes the
+# remainder (~75 GiB — comfortably above the ~8 GiB steady state; journald
+# self-caps and pcp culls at ~2 weeks).
 UUID_HOME="e3b1c7a5-2f4d-4b8e-9c6a-1d5f7e9b3a21"
 UUID_CTR="f4c2d8b6-3a5e-4c9f-8d7b-2e6a8f0c4b32"
 UUID_VM="a5d3e9c7-4b6f-4d0a-9e8c-3f7b9a1d5c43"
 UUID_LOG="b6e4f0d8-5c7a-4e1b-8f9d-4a8c0b2e6d54"
 MIB_HOME=2048000     # 2000 GiB
-MIB_CTR=768000       # 750 GiB
-MIB_VM=768000        # 750 GiB
+MIB_CTR=844800       # 825 GiB
+MIB_VM=844800        # 825 GiB
 
 fail() {
     echo "STRIX GUARD: FAIL — $*" >&2

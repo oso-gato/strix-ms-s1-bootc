@@ -30,8 +30,8 @@ Built to the frozen spec (REQUIREMENTS.md v1.0, R1–R14 / D1–D14).
   (recommended-model alias, auto mode, ultracode/xhigh); host never mutated.
 - New: three-path first boot — preserve-restore → ak-private pull (GitHub
   device flow, single approval) → interactive; sudo flip on completion.
-- Data drive re-carved (one-time wipe migration from noir): home 2000 GiB /
-  containers 750 GiB / vm 750 GiB / log remainder.
+- Data drive re-carved (one-time wipe migration from noir; A12 final sizing):
+  home 2000 GiB / containers 825 GiB / vm 825 GiB / log remainder (~75 GiB).
 - Installers: bootc-image-builder anaconda ISOs, serial-pinned `%pre
   --erroronfail` guard, build-time key injection (anti-brick), offline install,
   installed system tracks ghcr.io `:stable`.
