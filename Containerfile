@@ -76,7 +76,8 @@ RUN chmod 0600 /etc/NetworkManager/system-connections/*.nmconnection \
     && chmod 0440 /etc/sudoers.d/strix-bootstrap \
     && chmod 0755 /usr/bin/strix-wifi /usr/bin/strix-setup \
                   /usr/bin/strix-firstboot-setup /usr/bin/strix-table100 \
-                  /usr/bin/strix-keys-sync /usr/bin/claude \
+                  /usr/bin/strix-keys-sync /usr/bin/cockpit-tailnet-serve \
+                  /usr/bin/claude \
                   /usr/bin/claudebox-rebuild /usr/bin/claudebox-daily \
                   /usr/share/strix/claudebox/claudebox-init.sh
 
@@ -106,6 +107,7 @@ RUN systemctl enable \
         strix-libvirt-relabel.service \
         strix-firstboot-setup.service strix-setup-tty1.service \
         strix-postinstall-verify.service tailscale-udp-gro.service \
+        cockpit-tailnet-serve.service \
         strix-table100.timer strix-keys-sync.timer \
     && systemctl --global enable claudebox-rebuild-daily.timer podman.socket
 # (--global podman.socket: every user gets a rootless podman API socket at

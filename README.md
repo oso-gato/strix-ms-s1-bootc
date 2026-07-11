@@ -53,7 +53,7 @@ strix succeeds [`noir-strix-halo-fcos`](https://github.com/oso-gato/noir-strix-h
 
 | Surface | How |
 |---|---|
-| Web console | `https://strix:9090` — system, containers, **VMs**, **SELinux**, files, updates/rollback |
+| Web console | `https://strix.<tailnet>.ts.net` (real cert, via tailscale serve) or `https://strix:9090` / `https://strix.local:9090` on the LAN — system, containers, **VMs**, **SELinux**, files, updates/rollback. By-name only once the tailnet serve applies (raw-IP URLs are rejected by the Origins allow-list). Prereq: MagicDNS + HTTPS Certificates enabled on the tailnet. |
 | Shell | `ssh core@strix` or `mosh strix` — every login lands in the shared tmux workspace `main`; devices of different sizes co-exist garble-free |
 | Wi-Fi uplink | `sudo strix-wifi {on\|off\|switch\|status\|list\|set-primary}` (bond0 stays the tailnet underlay) |
 | VMs | Cockpit → Virtual machines, or `virt-install`; all VM state lives on the data drive |

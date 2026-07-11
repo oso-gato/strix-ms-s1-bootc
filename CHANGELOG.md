@@ -6,7 +6,9 @@ Pre-1.0 series (amendment A2: v1.0 held while the operator's remaining
 program list lands; the briefly-published v1.0.0 release was withdrawn).
 Adds A1: fastfetch banner on every ssh/mosh login. Adds A3:
 flatpak-session-helper (host) + bubblewrap/socat (claudebox) — box→host
-bridge + sandbox groundwork for the future apparatus role.
+bridge + sandbox groundwork for the future apparatus role. Adds A4:
+cockpit-tailnet-serve — Cockpit at https://strix.<tailnet>.ts.net with a
+real TLS cert (LAN :9090 path unchanged; by-name access only once applied).
 
 Built to the frozen spec (REQUIREMENTS.md v1.0, R1–R14 / D1–D14).
 

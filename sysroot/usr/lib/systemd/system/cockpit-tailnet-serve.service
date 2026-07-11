@@ -1,0 +1,24 @@
+# Publish Cockpit on the tailnet (A4): tailscale serve :443 → Cockpit's own
+# TLS on 127.0.0.1:9090, plus the matching Origins in cockpit.conf. The
+# MANAGER owns the retry (idiomatic systemd, not a bash sleep-loop): the
+# helper makes ONE attempt and exits non-zero until MagicDNS + HTTPS
+# Certificates are enabled on the tailnet; Restart=on-failure reschedules
+# it; the first clean exit settles the unit. StartLimitIntervalSec=0 lifts
+# the start rate-limit so an open-ended wait (seconds to days) is never
+# capped. Type=oneshot without RemainAfterExit: a fire-once provisioning
+# task that settles at inactive(dead) — serve config persists in tailscaled.
+[Unit]
+Description=Publish Cockpit on the tailnet (tailscale serve :443 -> Cockpit TLS on loopback)
+Documentation=https://tailscale.com/kb/1242/tailscale-serve
+After=tailscaled.service cockpit.socket network-online.target
+Wants=tailscaled.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/cockpit-tailnet-serve
+Restart=on-failure
+RestartSec=60s
+
+[Install]
+WantedBy=multi-user.target

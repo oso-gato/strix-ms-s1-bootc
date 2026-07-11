@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# cockpit-tailnet-serve — publish Cockpit at https://strix.<tailnet>.ts.net
+# (real TLS cert at the tailnet edge) and make Cockpit accept that origin.
+# Adapted from fedora-bootstrap (A4) with two strix-specific differences:
+#
+#   1. Backend is https+insecure://127.0.0.1:9090 — Cockpit's OWN TLS, cert
+#      verification skipped (self-signed). Traffic is encrypted end-to-end
+#      (WireGuard + edge TLS outside, Cockpit TLS on the loopback hop), so
+#      R6's AllowUnencrypted=false stays true to its word and no
+#      ProtocolHeader trust is introduced. (Bootstrap proxied plain HTTP and
+#      needed AllowUnencrypted=true — safe there only because its socket was
+#      loopback-bound; strix's :9090 serves the LAN directly per R6.)
+#   2. cockpit.conf is REWRITTEN PRESERVING R6's hardening (LoginTo=false,
+#      AllowUnencrypted=false, MaxStartups=10) and Origins covers BOTH access
+#      paths — the MagicDNS name AND the LAN names — because setting Origins
+#      replaces Cockpit's default host-match. NOTE: once Origins is set,
+#      browsing by RAW IP breaks the login WebSocket; use strix / strix.local
+#      / the ts.net name (documented in README).
+#
+# ONE attempt per run — the systemd MANAGER owns the retry (unit declares
+# Restart=on-failure + RestartSec=60s + StartLimitIntervalSec=0). Exits
+# non-zero until the tailnet has MagicDNS + HTTPS Certificates enabled
+# (admin console: DNS → MagicDNS, then HTTPS Certificates); serve config
+# persists in tailscaled once applied. Run by cockpit-tailnet-serve.service.
+set -euo pipefail
+
+# 1. One serve attempt; timeout caps the block when certs/MagicDNS are off.
+if ! timeout 20 tailscale serve --bg --https=443 https+insecure://127.0.0.1:9090; then
+    echo "cockpit-serve: tailnet not ready — enable MagicDNS + HTTPS Certificates in the admin console; systemd will retry" >&2
+    exit 1
+fi
+
+# 2. Resolve this node's MagicDNS FQDN (only knowable once up and named).
+fqdn="$(tailscale status --json 2>/dev/null \
+        | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))' 2>/dev/null || true)"
+if [ -z "$fqdn" ]; then
+    echo "cockpit-serve: serve applied but no MagicDNS name resolved — is MagicDNS enabled?" >&2
+    exit 1
+fi
+
+# 3. Rewrite cockpit.conf: R6 hardening preserved + dual-path Origins.
+#    Idempotent: skip the rewrite (and the cockpit restart) if current.
+conf=/etc/cockpit/cockpit.conf
+if [ -f "$conf" ] && grep -qF "https://${fqdn}" "$conf"; then
+    echo "cockpit-serve: already published at https://${fqdn}/ (Origins current)"
+    exit 0
+fi
+install -D -m0644 /dev/stdin "$conf" <<EOF
+[WebService]
+; Written by cockpit-tailnet-serve (A4). R6 hardening preserved verbatim;
+; Origins added for the tailnet-served name + LAN names (setting Origins
+; replaces the default host-match — raw-IP URLs will be rejected).
+LoginTo = false
+AllowUnencrypted = false
+MaxStartups = 10
+Origins = https://${fqdn} wss://${fqdn} https://strix:9090 wss://strix:9090 https://strix.local:9090 wss://strix.local:9090
+EOF
+systemctl try-restart cockpit || true   # best-effort; conf also re-read on next connection
+echo "cockpit-serve: published at https://${fqdn}/ (Origins set: ts.net + LAN names)"
