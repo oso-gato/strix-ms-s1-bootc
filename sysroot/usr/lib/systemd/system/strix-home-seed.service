@@ -1,0 +1,36 @@
+# Seed /var/home/core onto the data drive on the FIRST boot after an install.
+#
+# Why: the installer (Anaconda) creates core + authorized_keys under the
+# SYSTEM drive's /var/home (the data drive is hidden from Anaconda by
+# ignoredisk). At runtime var-home.mount shadows that path with the data
+# drive. On a wipe install (fresh, empty strix-home) the shadowed content
+# must be copied up once, or key-only SSH has no keys — the predecessor's
+# v0.1 lost-home bug, closed structurally here. On a preserve install the
+# data drive already carries a home; the guard leaves it untouched (runtime
+# key rotation is strix-keys-sync's job, not this unit's).
+#
+# The shadowed system-drive /var is reachable at /ostree/deploy/*/var (the
+# deployment stateroot's physical var). The installer's kickstart %post also
+# seeds the data drive directly, making this unit a self-healing fallback.
+[Unit]
+Description=strix home seed (populate fresh strix-home from installer var)
+RequiresMountsFor=/var/home
+Before=sshd.service systemd-user-sessions.service
+ConditionPathExists=!/var/home/core
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'set -e; \
+  src=$(ls -d /ostree/deploy/*/var/home/core 2>/dev/null | head -1); \
+  if [ -n "$src" ] && [ -d "$src" ]; then \
+    cp -a "$src" /var/home/core; \
+    chown -R 1000:1000 /var/home/core; \
+    restorecon -R /var/home/core; \
+    logger -t strix-home-seed -p notice "seeded /var/home/core from $src"; \
+  else \
+    logger -t strix-home-seed -p err "no installer home found to seed — SSH may be keyless"; \
+  fi'
+
+[Install]
+WantedBy=multi-user.target

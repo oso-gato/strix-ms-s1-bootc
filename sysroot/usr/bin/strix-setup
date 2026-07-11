@@ -1,0 +1,258 @@
+#!/bin/bash
+# strix-setup — first-boot credential setter (R12). Three paths, in precedence
+# order handled here and by strix-firstboot-setup:
+#   1. preserve-restore : handled by strix-firstboot-setup (silent) — if it
+#                         already ran, the sentinel exists and this no-ops.
+#   2. PULL MODE        : fetch strix/firstboot.yaml from oso-gato/ak-private
+#                         after ONE human authorization (GitHub device flow via
+#                         gh, or a pasted fine-grained PAT), apply, persist,
+#                         delete the token.
+#   3. INTERACTIVE      : prompt for everything (the predecessor's flow).
+# Ends with the SUDO FLIP (R5): removes /etc/sudoers.d/strix-bootstrap so sudo
+# requires the just-set password from now on. flock + the .setup-done sentinel
+# make tty1 and SSH mutually exclusive (first-one-wins). Idempotent; re-run
+# safe. Usage: sudo strix-setup
+set -euo pipefail
+export LC_ALL=C
+
+SECRETS=/var/home/.strix-secrets
+SENTINEL="$SECRETS/.setup-done"
+NMDIR=/etc/NetworkManager/system-connections
+LOCK=/run/lock/strix-setup.lock
+AK_REPO="oso-gato/ak-private"
+AK_PATH="strix/firstboot.yaml"
+TS_ARGS=(--hostname=strix --advertise-routes=10.0.50.0/24)
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "strix-setup must run as root: sudo strix-setup" >&2
+  exit 1
+fi
+
+# ── Single-instance lock (tty1 vs SSH can't race) ────────────────────────────
+exec 9>"$LOCK"
+if ! flock -n 9; then
+  echo "strix-setup is already running in another session." >&2
+  exit 1
+fi
+
+if [ -e "$SENTINEL" ]; then
+  echo "already configured"
+  exit 0
+fi
+
+echo "── strix first-boot setup ──"
+echo
+
+# ── Acquire credentials: pull (device flow / PAT) or interactive ─────────────
+# Pulled values land in these; empty means "ask interactively".
+P_HASH=""; P_TS_KEY=""
+declare -A P_SSID P_PSK
+
+workdir=$(mktemp -d); chmod 700 "$workdir"
+cleanup() {
+  rm -rf "$workdir"
+  # Never leave a GitHub token on the box (R12): drop the gh credential store
+  # entry whether or not the pull succeeded.
+  gh auth logout --hostname github.com >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+fetch_yaml_devflow() {
+  echo "GitHub device flow: approve the printed code at github.com/login/device"
+  echo "from your phone or Mac (logged in as oso-gato)."
+  gh auth login --hostname github.com --git-protocol https --web || return 1
+  gh api "repos/$AK_REPO/contents/$AK_PATH" \
+     -H "Accept: application/vnd.github.raw" > "$workdir/firstboot.yaml" || return 1
+}
+
+fetch_yaml_pat() {
+  printf 'Paste the fine-grained PAT (read-only, %s): ' "$AK_REPO"
+  read -rs PAT; echo
+  curl -fsSL --retry 2 \
+       -H "Authorization: Bearer $PAT" \
+       -H "Accept: application/vnd.github.raw" \
+       "https://api.github.com/repos/$AK_REPO/contents/$AK_PATH" \
+       -o "$workdir/firstboot.yaml"
+  local rc=$?
+  unset PAT
+  return $rc
+}
+
+parse_yaml() {
+  # Emit KEY<TAB>VALUE lines from the constrained firstboot.yaml spec (R12).
+  python3 - "$workdir/firstboot.yaml" <<'PY'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1])) or {}
+def emit(k, v):
+    if v: print(f"{k}\t{v}")
+emit("HASH", d.get("core_password_hash", ""))
+emit("TSKEY", d.get("tailscale_authkey", ""))
+for slot in ("primary", "secondary", "tertiary"):
+    w = (d.get("wifi") or {}).get(slot) or {}
+    emit(f"SSID_{slot}", w.get("ssid", ""))
+    emit(f"PSK_{slot}", w.get("psk", ""))
+PY
+}
+
+if [ -f "$workdir/firstboot.yaml" ]; then :; fi
+echo "Credential source:"
+echo "  [1] Pull from $AK_REPO (GitHub device flow — approve once, no typing)"
+echo "  [2] Pull from $AK_REPO (paste a fine-grained read-only PAT)"
+echo "  [3] Enter everything interactively"
+printf 'Choose [1/2/3, default 1]: '
+read -r MODE; MODE="${MODE:-1}"
+
+PULLED=0
+case "$MODE" in
+  1) fetch_yaml_devflow && PULLED=1 || echo "[warn] pull failed — falling back to interactive." >&2 ;;
+  2) fetch_yaml_pat && PULLED=1 || echo "[warn] pull failed — falling back to interactive." >&2 ;;
+  *) : ;;
+esac
+
+if [ "$PULLED" = 1 ]; then
+  while IFS=$'\t' read -r k v; do
+    case "$k" in
+      HASH) P_HASH="$v" ;;
+      TSKEY) P_TS_KEY="$v" ;;
+      SSID_*) P_SSID["${k#SSID_}"]="$v" ;;
+      PSK_*)  P_PSK["${k#PSK_}"]="$v" ;;
+    esac
+  done < <(parse_yaml)
+  echo "[ok] pulled firstboot.yaml from $AK_REPO"
+fi
+
+# ── (1) Core password (R5: gates sudo + Cockpit only, never sshd) ────────────
+if [ -n "$P_HASH" ]; then
+  usermod -p "$P_HASH" core
+  echo "[ok] core password applied from pulled hash."
+else
+  while :; do
+    printf 'Set the core password: '
+    read -rs PW1; echo
+    printf 'Confirm the core password: '
+    read -rs PW2; echo
+    if [ -z "$PW1" ]; then
+      echo "[warn] empty password rejected; try again." >&2
+      continue
+    fi
+    if [ "$PW1" != "$PW2" ]; then
+      echo "[warn] passwords did not match; try again." >&2
+      continue
+    fi
+    break
+  done
+  printf 'core:%s\n' "$PW1" | chpasswd
+  unset PW1 PW2
+  echo "[ok] core password set."
+fi
+echo
+
+# ── (2) Wi-Fi slots (R2: metric 50, priority 100/90/80, WPA3-SAE) ───────────
+write_slot() {
+  slot="$1"; prio="$2"; ssid="$3"; psk="$4"
+  f="$NMDIR/wifi-$slot.nmconnection"
+  umask 077
+  {
+    printf '[connection]\n'
+    printf 'id=wifi-%s\n' "$slot"
+    printf 'type=wifi\n'
+    printf 'autoconnect=false\n'
+    printf 'autoconnect-priority=%s\n' "$prio"
+    printf '\n[wifi]\n'
+    printf 'mode=infrastructure\n'
+    printf 'ssid=%s\n' "$ssid"
+    printf 'cloned-mac-address=preserve\n'
+    printf '\n[wifi-security]\n'
+    printf 'key-mgmt=sae\n'
+    printf 'pmf=3\n'
+    printf 'psk=%s\n' "$psk"
+    printf '\n[ipv4]\n'
+    printf 'method=auto\n'
+    printf 'route-metric=50\n'
+    printf '\n[ipv6]\n'
+    printf 'method=auto\n'
+    printf 'addr-gen-mode=default\n'
+    printf 'route-metric=50\n'
+  } >"$f"
+  chmod 0600 "$f"
+  echo "[ok] wrote $f"
+}
+
+WROTE_WIFI=0
+for pair in "primary 100" "secondary 90" "tertiary 80"; do
+  set -- $pair
+  slot="$1"; prio="$2"
+  if [ -n "${P_SSID[$slot]:-}" ]; then
+    write_slot "$slot" "$prio" "${P_SSID[$slot]}" "${P_PSK[$slot]:-}"
+    WROTE_WIFI=1
+    continue
+  fi
+  [ "$PULLED" = 1 ] && { echo "[skip] $slot (not in firstboot.yaml)"; continue; }
+  printf 'Wi-Fi %s SSID (blank to skip): ' "$slot"
+  read -r SSID
+  if [ -z "$SSID" ]; then
+    echo "[skip] $slot"
+    continue
+  fi
+  printf 'Wi-Fi %s PSK: ' "$slot"
+  read -rs PSK; echo
+  write_slot "$slot" "$prio" "$SSID" "$PSK"
+  unset PSK
+  WROTE_WIFI=1
+done
+if [ "$WROTE_WIFI" -eq 1 ]; then
+  nmcli connection reload
+  echo "[ok] reloaded NetworkManager connections."
+fi
+echo
+
+# ── (3) Tailscale onboarding (R3) ────────────────────────────────────────────
+echo "── Tailscale onboarding ──"
+if [ -n "$P_TS_KEY" ]; then
+  if tailscale up "${TS_ARGS[@]}" --authkey="$P_TS_KEY"; then
+    echo "[ok] joined the tailnet via auth key."
+  else
+    echo "[warn] auth key rejected (expired?) — falling back to browser auth." >&2
+    tailscale up "${TS_ARGS[@]}" || \
+      echo "[warn] tailscale up exited non-zero; re-run 'sudo tailscale up ${TS_ARGS[*]}' later." >&2
+  fi
+else
+  echo "Running: tailscale up ${TS_ARGS[*]}"
+  echo "Approve the printed auth URL in your browser, then approve route"
+  echo "advertisements at https://login.tailscale.com/admin/machines"
+  echo "(zero-click next time: pre-approved key + autoApprovers for 10.0.50.0/24)"
+  tailscale up "${TS_ARGS[@]}" || \
+    echo "[warn] tailscale up exited non-zero; re-run 'sudo tailscale up ${TS_ARGS[*]}' later." >&2
+fi
+echo
+
+# ── (4) Persist to the preserved data drive (R12 path 1 feeds on this) ───────
+mkdir -p "$SECRETS"
+chown root:root "$SECRETS"
+chmod 0700 "$SECRETS"
+
+getent shadow core | cut -d: -f2 >"$SECRETS/core.hash"
+chmod 0600 "$SECRETS/core.hash"
+
+for slot in primary secondary tertiary; do
+  src="$NMDIR/wifi-$slot.nmconnection"
+  if [ -f "$src" ]; then
+    install -m 0600 -o root -g root "$src" "$SECRETS/wifi-$slot.nmconnection"
+  fi
+done
+
+if [ -f /var/lib/tailscale/tailscaled.state ]; then
+  install -m 0600 -o root -g root /var/lib/tailscale/tailscaled.state "$SECRETS/tailscaled.state"
+fi
+
+# ── (5) SUDO FLIP (R5): from here on, sudo requires the core password ────────
+rm -f /etc/sudoers.d/strix-bootstrap
+echo "[ok] sudo now requires the core password (bootstrap NOPASSWD removed)."
+
+# Completion sentinel — last, so a crash mid-setup leaves it re-runnable.
+: >"$SENTINEL"
+chmod 0600 "$SENTINEL"
+rm -f /etc/motd.d/10-strix-setup
+
+echo "[ok] persisted credentials to $SECRETS"
+echo "── strix setup complete ──"

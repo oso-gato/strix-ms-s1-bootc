@@ -1,0 +1,23 @@
+#!/bin/bash
+# strix-table100 — keep routing table 100's default route(s) tracking bond0's
+# CURRENT gateway, so the Tailscale-underlay fwmark pin survives DHCP/RA churn
+# (R3). bond0's keyfile statically sets the v4 table-100 default via 10.0.50.1
+# plus the v4+v6 fwmark routing rules; this is the dynamic safety-net (re-point
+# v4 if the gateway moves) and the v6 populator (the keyfile can't statically
+# know the RA-learned v6 gateway). Idempotent via `ip route replace`. Driven by
+# strix-table100.timer.
+
+set -euo pipefail
+export LC_ALL=C
+
+gw4=$(ip -4 route show default dev bond0 | awk '/default/{print $3; exit}')
+if [ -n "${gw4:-}" ]; then
+  ip route replace default via "$gw4" dev bond0 table 100
+  logger -t strix-table100 -p info "table 100 v4 default → $gw4 dev bond0"
+fi
+
+gw6=$(ip -6 route show default dev bond0 | awk '/default/{print $3; exit}')
+if [ -n "${gw6:-}" ]; then
+  ip -6 route replace default via "$gw6" dev bond0 table 100
+  logger -t strix-table100 -p info "table 100 v6 default → $gw6 dev bond0"
+fi

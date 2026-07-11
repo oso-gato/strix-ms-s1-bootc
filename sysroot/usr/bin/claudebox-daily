@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# claudebox-daily — the DAILY refresh DECISION (R8), not the rebuild itself.
+# Run by claudebox-rebuild-daily.timer. Keeps the box from drifting without
+# ever interrupting live work:
+#   * no session active -> start the detached rebuild now.
+#   * session active    -> drop a rebuild.pending marker; the claude wrapper
+#                          rebuilds the moment the session exits.
+set -uo pipefail
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+state="$HOME/.local/state/claudebox"; mkdir -p "$state"
+
+# Probe the session lock: exclusive taken => idle => rebuild now.
+if flock -n -x "$state/session.lock" -c true 2>/dev/null; then
+    echo "claudebox daily refresh: idle -> rebuilding now."
+    exec systemctl --user start --no-block claudebox-rebuild-run.service
+fi
+echo "claudebox daily refresh: session active -> deferring; rebuilds on exit."
+: > "$state/rebuild.pending"

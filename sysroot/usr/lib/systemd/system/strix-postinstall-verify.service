@@ -1,0 +1,48 @@
+# Post-install/post-update invariant assertions (R13). Predecessor lesson:
+# three shipped bugs shared DNA — config verified against documentation, not
+# a running system. This unit asserts the provisioning invariants on the box,
+# fails loud in the journal under tag strix-verify, and re-runs after every
+# boot (cheap; also the R11 post-update config-intact check).
+[Unit]
+Description=strix post-install verification of provisioning invariants
+Wants=network-online.target
+After=network-online.target NetworkManager.service etc-libvirt.mount strix-firstboot-setup.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# R9: all four data mounts, by UUID (device-name robust; catches "data landed
+# on the root fs because the mount never happened" deterministically).
+ExecStart=/bin/sh -c 'test "$(findmnt -no UUID /var/home)" = "e3b1c7a5-2f4d-4b8e-9c6a-1d5f7e9b3a21" || { logger -t strix-verify -p err "/var/home not on strix-home"; exit 1; }'
+ExecStart=/bin/sh -c 'test "$(findmnt -no UUID /var/lib/containers)" = "f4c2d8b6-3a5e-4c9f-8d7b-2e6a8f0c4b32" || { logger -t strix-verify -p err "/var/lib/containers not on strix-containers"; exit 1; }'
+ExecStart=/bin/sh -c 'test "$(findmnt -no UUID /var/lib/libvirt)" = "a5d3e9c7-4b6f-4d0a-9e8c-3f7b9a1d5c43" || { logger -t strix-verify -p err "/var/lib/libvirt not on strix-vm"; exit 1; }'
+ExecStart=/bin/sh -c 'test "$(findmnt -no UUID /var/log)" = "b6e4f0d8-5c7a-4e1b-8f9d-4a8c0b2e6d54" || { logger -t strix-verify -p err "/var/log not on strix-log"; exit 1; }'
+# R7: the /etc/libvirt bind is live (VM definitions on the data drive).
+ExecStart=/bin/sh -c 'findmnt -no SOURCE /etc/libvirt | grep -q . || { logger -t strix-verify -p err "/etc/libvirt bind not mounted"; exit 1; }'
+# R2: bond0 enslaving both NICs; Wi-Fi device managed.
+ExecStart=/bin/sh -c 'ip link show bond0 >/dev/null 2>&1 && ip link show enp97s0 master bond0 >/dev/null 2>&1 && ip link show enp98s0 master bond0 >/dev/null 2>&1 || { logger -t strix-verify -p err "bond0 missing or not enslaving both NICs"; exit 1; }'
+ExecStart=/bin/sh -c 'state=$(nmcli -g GENERAL.STATE device show wlp99s0 2>/dev/null | head -1); case "$state" in ""|*unavailable*|*unmanaged*) logger -t strix-verify -p err "wlp99s0 in error state: ${state:-not present}"; exit 1 ;; *) ;; esac'
+ExecStart=/bin/sh -c 'test -f /lib/firmware/regulatory.db || { logger -t strix-verify -p err "regulatory.db missing"; exit 1; }'
+# R3: subnet-router forwarding + tailscale present.
+ExecStart=/bin/sh -c '[ "$(sysctl -n net.ipv4.ip_forward)" = "1" ] || { logger -t strix-verify -p err "ip_forward not enabled"; exit 1; }'
+ExecStart=/bin/sh -c 'command -v tailscale >/dev/null || { logger -t strix-verify -p err "tailscale binary missing"; exit 1; }'
+# R6: cockpit socket-activated on any-interface :9090; config hardening present.
+ExecStart=/bin/sh -c 'systemctl is-active --quiet cockpit.socket || { logger -t strix-verify -p err "cockpit.socket not active"; exit 1; }'
+ExecStart=/bin/sh -c 'ss -tlnH "sport = :9090" | grep -Eq "^LISTEN.*[[:space:]](\\*|0\\.0\\.0\\.0|\\[::\\]):9090[[:space:]]" || { logger -t strix-verify -p err "cockpit not listening on any-interface :9090"; exit 1; }'
+ExecStart=/bin/sh -c 'grep -Eq "^[[:space:]]*LoginTo[[:space:]]*=[[:space:]]*false" /etc/cockpit/cockpit.conf || { logger -t strix-verify -p err "cockpit.conf missing LoginTo=false"; exit 1; }'
+ExecStart=/bin/sh -c 'rpm -q cockpit-bridge cockpit-system cockpit-ws cockpit-podman cockpit-networkmanager cockpit-files cockpit-ostree cockpit-selinux cockpit-machines >/dev/null || { logger -t strix-verify -p err "cockpit subpackage(s) missing"; exit 1; }'
+# R7: libvirt sockets live.
+ExecStart=/bin/sh -c 'systemctl is-active --quiet virtqemud.socket && systemctl is-active --quiet virtnetworkd.socket && systemctl is-active --quiet virtstoraged.socket || { logger -t strix-verify -p err "libvirt socket(s) not active"; exit 1; }'
+# R4/R8: shell + workbench tooling baked.
+ExecStart=/bin/sh -c 'command -v mosh-server >/dev/null && command -v tmux >/dev/null && command -v distrobox >/dev/null && command -v gh >/dev/null || { logger -t strix-verify -p err "shell/workbench tool missing (mosh/tmux/distrobox/gh)"; exit 1; }'
+ExecStart=/bin/sh -c 'test -f /usr/share/strix/claudebox/distrobox.ini || { logger -t strix-verify -p err "claudebox manifest missing"; exit 1; }'
+# R4d: runtime key-sync armed. R11: auto-update timer armed.
+ExecStart=/bin/sh -c 'systemctl is-active --quiet strix-keys-sync.timer || { logger -t strix-verify -p err "strix-keys-sync.timer not active"; exit 1; }'
+ExecStart=/bin/sh -c 'systemctl is-active --quiet bootc-fetch-apply-updates.timer || { logger -t strix-verify -p err "bootc auto-update timer not active"; exit 1; }'
+# R5: sudo-flip state consistent — after setup, the bootstrap NOPASSWD file
+# must be gone (strix-firstboot-setup enforces; this asserts).
+ExecStart=/bin/sh -c 'if [ -f /var/home/.strix-secrets/.setup-done ] && [ -f /etc/sudoers.d/strix-bootstrap ]; then logger -t strix-verify -p err "sudo flip not enforced (bootstrap NOPASSWD still present after setup)"; exit 1; fi'
+ExecStart=/bin/sh -c 'logger -t strix-verify -p notice "all invariants verified"'
+
+[Install]
+WantedBy=multi-user.target

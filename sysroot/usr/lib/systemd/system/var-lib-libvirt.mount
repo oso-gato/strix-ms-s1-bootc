@@ -1,0 +1,15 @@
+# strix data drive p3 — ALL libvirt state (R7/R9): VM disk images, nvram,
+# snapshots, leases, plus the persisted /etc/libvirt payload in ./etc-libvirt
+# (bind-mounted by etc-libvirt.mount). A preserve reinstall boots with every
+# VM defined and startable.
+[Unit]
+Description=strix /var/lib/libvirt (data drive: strix-vm)
+
+[Mount]
+What=/dev/disk/by-uuid/a5d3e9c7-4b6f-4d0a-9e8c-3f7b9a1d5c43
+Where=/var/lib/libvirt
+Type=xfs
+Options=noatime,nofail
+
+[Install]
+WantedBy=local-fs.target

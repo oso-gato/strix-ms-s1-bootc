@@ -1,0 +1,12 @@
+# The actual claudebox rebuild: destroy + recreate from the pinned manifest,
+# then re-apply the host bridges + managed settings (claudebox-init.sh).
+# Detached user service so it outlives the box it recreates and any terminal.
+[Unit]
+Description=Rebuild the claudebox distrobox (destroy + recreate from manifest)
+
+[Service]
+Type=oneshot
+TimeoutStartSec=30min
+ExecStart=/bin/sh -c 'distrobox rm -f claudebox 2>/dev/null || true; \
+  distrobox assemble create --file /usr/share/strix/claudebox/distrobox.ini && \
+  /usr/share/strix/claudebox/claudebox-init.sh'

@@ -1,0 +1,90 @@
+#!/bin/bash
+# strix-firstboot-setup — every-boot orchestrator (R12 path 1 + R5 enforcement).
+# Either RESTORE persisted credentials silently (preserve reinstall), or make
+# strix-setup available on BOTH channels (MOTD for SSH + the tty1 unit),
+# first-one-wins. Also self-heals the sudo flip: once the setup sentinel
+# exists, the bootstrap NOPASSWD file must never survive a boot (a reinstall
+# or image update can resurrect it in /etc). Driven by
+# strix-firstboot-setup.service; not meant to be run by hand.
+set -euo pipefail
+export LC_ALL=C
+
+SECRETS=/var/home/.strix-secrets
+SETUP_DONE="$SECRETS/.setup-done"
+APPLIED="$SECRETS/.setup-done-applied"
+NM_DIR=/etc/NetworkManager/system-connections
+TS_STATE=/var/lib/tailscale/tailscaled.state
+MOTD=/etc/motd.d/10-strix-setup
+BOOTSTRAP_SUDOERS=/etc/sudoers.d/strix-bootstrap
+
+# THIS-boot reset: $APPLIED lives on the persistent data drive, so make it
+# mean "restored on THIS boot" by clearing any stale copy the first time the
+# service runs after a fresh boot (witness = tmpfs token under /run).
+if [ ! -e /run/strix/firstboot-setup.booted ]; then
+  rm -f "$APPLIED"
+  install -d -m 0755 /run/strix
+  : > /run/strix/firstboot-setup.booted
+fi
+
+# ── Setup finished (sentinel present): tear down the prompt surface and
+# ENFORCE the sudo flip (R5) — every boot, idempotent. ────────────────────────
+if [ -f "$SETUP_DONE" ]; then
+  rm -f "$MOTD"
+  if [ -f "$BOOTSTRAP_SUDOERS" ]; then
+    rm -f "$BOOTSTRAP_SUDOERS"
+    logger -t strix-firstboot-setup -p notice "sudo flip re-enforced (bootstrap NOPASSWD removed)"
+  fi
+fi
+
+# ── PRESERVE reinstall: persisted creds exist and not yet restored on THIS
+# boot → restore silently, no prompt. ─────────────────────────────────────────
+if [ -d "$SECRETS" ] && [ -f "$SETUP_DONE" ] && [ ! -f "$APPLIED" ]; then
+  if [ -f "$SECRETS/core.hash" ]; then
+    hash=$(cat "$SECRETS/core.hash")
+    usermod -p "$hash" core
+    logger -t strix-firstboot-setup -p notice "restored core password hash"
+  fi
+
+  reloaded=0
+  for kf in "$SECRETS"/wifi-*.nmconnection; do
+    [ -e "$kf" ] || continue
+    install -m 0600 -o root -g root "$kf" "$NM_DIR/$(basename "$kf")"
+    reloaded=1
+  done
+  if [ "$reloaded" = 1 ]; then
+    nmcli connection reload
+    logger -t strix-firstboot-setup -p notice "restored Wi-Fi keyfiles and reloaded NetworkManager"
+  fi
+
+  if [ -f "$SECRETS/tailscaled.state" ]; then
+    install -d -m 0700 "$(dirname "$TS_STATE")"
+    install -m 0600 -o root -g root "$SECRETS/tailscaled.state" "$TS_STATE"
+    systemctl restart tailscaled
+    logger -t strix-firstboot-setup -p notice "restored tailscaled.state; rejoining tailnet"
+  fi
+
+  touch "$APPLIED"
+  logger -t strix-firstboot-setup -p notice "preserve restore complete; no prompt shown"
+  exit 0
+fi
+
+# ── FRESH / wipe: publish the MOTD prompt for the SSH path (tty1 unit offers
+# the console path; strix-setup's flock + sentinel arbitrate). ────────────────
+if [ ! -f "$SETUP_DONE" ]; then
+  install -d -m 0755 "$(dirname "$MOTD")"
+  printf '%s\n' \
+    '────────────────────────────────────────────────────────────────────' \
+    '  strix — first-boot setup not done yet' \
+    '────────────────────────────────────────────────────────────────────' \
+    '' \
+    '  Set the core password, Wi-Fi, and Tailscale (one authorization,' \
+    '  pulled from ak-private — or fully interactive):' \
+    '  $ ssh core@strix' \
+    '  $ sudo strix-setup' \
+    '' \
+    '  (a prompt is also waiting on the local console / tty1)' \
+    '────────────────────────────────────────────────────────────────────' \
+    > "$MOTD"
+  chmod 0644 "$MOTD"
+fi
+exit 0

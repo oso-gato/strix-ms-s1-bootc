@@ -1,0 +1,15 @@
+# Runtime SSH-key re-sync (R4d): github.com/oso-gato.keys is the single
+# trust root; rotating a key on GitHub propagates to the box without a
+# reinstall. Runs as core (its own authorized_keys); failure-safe — the
+# script never wipes existing keys on a failed/empty fetch.
+[Unit]
+Description=strix authorized_keys sync from github.com/oso-gato.keys
+RequiresMountsFor=/var/home
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=core
+Group=core
+ExecStart=/usr/bin/strix-keys-sync

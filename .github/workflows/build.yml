@@ -1,0 +1,110 @@
+# strix fortnightly build & publish (R11/R10).
+#
+# 1. podman-builds the bootc image from ./Containerfile on the current
+#    fedora-bootc:44 base and pushes ghcr.io/oso-gato/strix-ms-s1-bootc
+#    (:stable + :v<version>). The box's bootc-fetch-apply-updates.timer pulls
+#    :stable — this schedule IS the OS update cadence.
+# 2. Runs ./build-iso.sh (bootc-image-builder anaconda-iso) to produce
+#    strix-preserve.iso + strix-wipe.iso from the just-pushed image, and
+#    publishes them on a GitHub Release tagged from CHANGELOG.md.
+#
+# No secrets: only the auto-provided GITHUB_TOKEN (ghcr push + Release).
+# SSH keys are fetched from github.com/oso-gato.keys inside build-iso.sh
+# (anti-brick gate: zero keys = fail).
+#
+# Runner notes (verified against osbuild/image-builder issue #446, 2026-07-11):
+# ubuntu-24.04 required (22.04 ships Podman v3 — too old); the storage
+# graph-driver workaround below is the documented fix for BIB on GH runners.
+
+name: build
+
+on:
+  schedule:
+    - cron: "0 6 1,15 * *"   # 06:00 UTC, 1st + 15th — fortnightly
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create the Release
+  packages: write   # push to ghcr.io
+
+env:
+  IMAGE: ghcr.io/oso-gato/strix-ms-s1-bootc
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ISO output + embedded image + osbuild store need room the stock
+      # runner doesn't have — drop the big preinstalled toolchains.
+      - name: Free runner disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      # BIB-on-GH-runner storage workaround (osbuild/image-builder #446):
+      # reset root's container storage and pin the overlay driver explicitly.
+      - name: Prepare rootful podman storage
+        run: |
+          set -euo pipefail
+          sudo rm -rf /var/lib/containers/storage
+          sudo mkdir -p /etc/containers
+          printf '[storage]\ndriver = "overlay"\nrunroot = "/run/containers/storage"\ngraphroot = "/var/lib/containers/storage"\n' \
+            | sudo tee /etc/containers/storage.conf >/dev/null
+          sudo podman info --format '{{.Store.GraphDriverName}}'
+
+      - name: Read release version from CHANGELOG
+        id: ver
+        run: |
+          set -euo pipefail
+          v="$(grep -m1 -oE '^## v[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | sed 's/^## //')"
+          test -n "$v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Release version (from CHANGELOG): $v"
+
+      - name: Build bootc image
+        run: |
+          set -euo pipefail
+          sudo podman build --pull=always \
+            -t "$IMAGE:stable" \
+            -t "$IMAGE:${{ steps.ver.outputs.version }}" .
+
+      - name: Push to ghcr.io
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io \
+            --username "${{ github.actor }}" --password-stdin
+          sudo podman push "$IMAGE:stable"
+          sudo podman push "$IMAGE:${{ steps.ver.outputs.version }}"
+
+      # build-iso.sh pulls $IMAGE:stable back from ghcr (so the ISO embeds
+      # exactly what was published), renders the two kickstarts with the
+      # fetched SSH keys, and runs bootc-image-builder twice.
+      - name: Build ISOs
+        run: |
+          set -euo pipefail
+          ./build-iso.sh
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: strix ${{ steps.ver.outputs.version }}
+          body: |
+            Automated strix build.
+
+            Image: ghcr.io/oso-gato/strix-ms-s1-bootc:stable (also tagged ${{ steps.ver.outputs.version }})
+            Installed systems track :stable via bootc auto-updates.
+
+            Assets:
+            - strix-preserve.iso — reinstalls the OS, KEEPS the 4 TB data drive (match-or-halt).
+            - strix-wipe.iso     — reinstalls the OS, RECREATES the 4 TB data drive (first install / migration from noir).
+
+            No credentials are baked; first boot: `ssh core@strix && sudo strix-setup`.
+          files: |
+            strix-preserve.iso
+            strix-wipe.iso

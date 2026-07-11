@@ -1,0 +1,11 @@
+# Shortly after boot, then daily. Persistent catches up after downtime.
+[Unit]
+Description=strix authorized_keys sync schedule
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=24h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

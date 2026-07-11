@@ -1,0 +1,8 @@
+# strix BOOTSTRAP window (R5): passwordless sudo exists ONLY until
+# strix-setup completes — the operator must be able to run `sudo strix-setup`
+# over key-authenticated SSH before any password exists. strix-setup removes
+# this file at completion (the "sudo flip"); strix-firstboot-setup re-removes
+# it on every boot once the setup sentinel exists (self-healing after image
+# updates); strix-postinstall-verify asserts the flip. Steady state: stock
+# %wheel with password.
+%wheel ALL=(ALL) NOPASSWD: ALL

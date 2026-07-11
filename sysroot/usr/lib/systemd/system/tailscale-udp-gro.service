@@ -1,0 +1,18 @@
+# Tailscale's performance KB (tailscale.com/kb/1320) recommends this ethtool
+# tweak on kernels >= 6.2 acting as a subnet router; without it, forwarded
+# UDP isn't a GRO-coalescing candidate and forward throughput sits well below
+# NIC line rate. Idempotent; every boot. Leading '-' tolerates kernels that
+# don't expose rx-gro-list on bond devices.
+[Unit]
+Description=Tailscale UDP-GRO forwarding tweak for bond0
+Wants=sys-subsystem-net-devices-bond0.device
+After=sys-subsystem-net-devices-bond0.device NetworkManager.service
+Before=tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/sbin/ethtool -K bond0 rx-udp-gro-forwarding on rx-gro-list off
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+# strix data drive p2 — podman graph storage (R9).
+[Unit]
+Description=strix /var/lib/containers (data drive: strix-containers)
+
+[Mount]
+What=/dev/disk/by-uuid/f4c2d8b6-3a5e-4c9f-8d7b-2e6a8f0c4b32
+Where=/var/lib/containers
+Type=xfs
+Options=noatime,nofail
+
+[Install]
+WantedBy=local-fs.target

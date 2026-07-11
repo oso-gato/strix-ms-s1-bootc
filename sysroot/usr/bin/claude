@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# claude — host wrapper: every session runs INSIDE the claudebox distrobox
+# (R8; the host never runs claude-code). Behavior:
+#   * box missing            -> build it first (blocks with progress).
+#   * rebuild in progress    -> attach to its log, then continue.
+#   * daily refresh came due while you worked -> rebuild NOW on session exit.
+#   * holds a SHARED session lock so claudebox-daily defers while you work.
+# Model policy (D11): --model default = Claude Code's RECOMMENDED alias —
+# never a fixed pin; a client update moves the model with it. ultracode is
+# session-scoped, so the wrapper is the only place it can be defaulted.
+set -uo pipefail
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+state="$HOME/.local/state/claudebox"; mkdir -p "$state"
+
+if systemctl --user is-active --quiet claudebox-rebuild-run.service 2>/dev/null; then
+    exec /usr/bin/claudebox-rebuild --watch-only
+fi
+
+if ! podman container exists claudebox 2>/dev/null; then
+    echo ">> claudebox does not exist yet — building it (first run, ~2-5 min)…"
+    /usr/bin/claudebox-rebuild
+fi
+
+# Hold a SHARED session lock for the session's lifetime; retry the transient
+# post-rebuild OCI/PTY race (fresh container's /dev/pts can need a moment).
+run_session() {
+    local tries=0
+    while :; do
+        flock -s "$state/session.lock" distrobox enter claudebox -- bash -lc \
+            'exec /usr/bin/claude --model default --settings "{\"ultracode\":true}" "$@"' bash "$@"
+        rc=$?
+        [ $rc -eq 0 ] && return 0
+        tries=$((tries + 1))
+        [ $tries -ge 3 ] && return $rc
+        sleep 2
+    done
+}
+run_session "$@"
+rc=$?
+
+# Deferred daily refresh: fire it now that the session ended (idle check via
+# the lock — another live session keeps deferring).
+if [ -e "$state/rebuild.pending" ] && flock -n -x "$state/session.lock" -c true 2>/dev/null; then
+    rm -f "$state/rebuild.pending"
+    echo ">> a daily claudebox refresh came due while you were working — rebuilding now…"
+    systemctl --user start --no-block claudebox-rebuild-run.service
+fi
+exit $rc

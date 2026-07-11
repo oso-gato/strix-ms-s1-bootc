@@ -1,0 +1,20 @@
+# Restore SELinux labels on the bind-mounted /etc/libvirt (labels write
+# through to the data-drive source via xattrs) and on the /var/lib/libvirt
+# mountpoint itself. Deliberately NOT recursive over /var/lib/libvirt — VM
+# disk images can be hundreds of GiB and libvirt labels images itself at
+# creation (virt_image_t); a recursive pass every boot would be minutes of
+# wasted I/O.
+[Unit]
+Description=strix libvirt SELinux relabel (config bind + state mountpoint)
+RequiresMountsFor=/etc/libvirt
+After=etc-libvirt.mount
+Before=virtqemud.service virtnetworkd.service virtstoraged.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/sbin/restorecon -R /etc/libvirt
+ExecStart=-/usr/sbin/restorecon /var/lib/libvirt
+
+[Install]
+WantedBy=local-fs.target

@@ -1,0 +1,17 @@
+# strix data drive p1 — user homes (R9). UUIDs are arbitrary-but-fixed
+# constants minted for strix v1.0; the wipe installer's %pre creates the
+# filesystem with exactly this UUID (mkfs.xfs -m uuid=...), and
+# strix-postinstall-verify asserts the mount by UUID.
+# nofail: one bad disk must not drop strix to emergency mode; the ordering
+# hole nofail opens is closed per-service with RequiresMountsFor drop-ins.
+[Unit]
+Description=strix /var/home (data drive: strix-home)
+
+[Mount]
+What=/dev/disk/by-uuid/e3b1c7a5-2f4d-4b8e-9c6a-1d5f7e9b3a21
+Where=/var/home
+Type=xfs
+Options=noatime,nofail
+
+[Install]
+WantedBy=local-fs.target

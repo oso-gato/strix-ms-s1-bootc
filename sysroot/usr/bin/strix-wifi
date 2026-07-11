@@ -1,0 +1,154 @@
+#!/bin/bash
+# strix-wifi — Wi-Fi uplink control across three slots (primary/secondary/tertiary).
+# All slot keyfiles set route-metric=50, so any associated Wi-Fi beats bond0
+# (metric=100) for the internet default route; the tailnet underlay stays pinned
+# to bond0 regardless (fwmark table 100). NM does NOT auto-roam between SSIDs,
+# so slot selection is operator-triggered. Only one Wi-Fi associates at a time
+# on wlp99s0. (R2; behavior identical to the FCOS predecessor's noir-wifi.)
+# Usage: sudo strix-wifi {on|off|switch <slot>|status|list|set-primary <slot|SSID>}
+
+set -euo pipefail
+export LC_ALL=C   # locale-safe nmcli/awk output parsing
+
+DEV="wlp99s0"
+SC="/etc/NetworkManager/system-connections"
+SLOTS="primary secondary tertiary"
+
+# The Wi-Fi stack is baked into the image (no first-boot layering), so an
+# absent device means a hardware/driver problem, not sequencing.
+require_wifi() {
+  nmcli -t -f DEVICE,TYPE device status 2>/dev/null \
+    | awk -F: -v d="$DEV" '$1==d && $2=="wifi"{f=1} END{exit f?0:1}' \
+    || { echo "[err] $DEV not present/managed — check 'nmcli device' and journal (mt7925e)" >&2; exit 2; }
+}
+
+slot_file() { echo "$SC/wifi-$1.nmconnection"; }
+
+# The [connection] id NM knows this slot by. Anchored to wifi-<slot> by the
+# keyfile; set-primary never moves it (it moves the network payload instead).
+slot_id() {
+  local f; f=$(slot_file "$1")
+  [ -r "$f" ] || { echo "wifi-$1"; return; }
+  awk -F= '/^\[/{s=$0} s=="[connection]" && $1=="id"{print $2; exit}' "$f"
+}
+
+slot_ssid() {
+  local f; f=$(slot_file "$1")
+  [ -r "$f" ] || { echo ""; return; }
+  awk -F= '/^\[/{s=$0} s=="[wifi]" && $1=="ssid"{print $2; exit}' "$f"
+}
+
+first_configured() {
+  local s
+  for s in $SLOTS; do
+    [ -n "$(slot_ssid "$s")" ] && { echo "$s"; return; }
+  done
+  echo ""
+}
+
+active_conn() {
+  nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device status 2>/dev/null \
+    | awk -F: -v d="$DEV" '$1==d && $2=="wifi" && $3=="connected"{print $4}'
+}
+
+resolve_slot() {
+  local arg="$1" s
+  for s in $SLOTS; do
+    [ "$arg" = "$s" ] && { echo "$s"; return; }
+  done
+  for s in $SLOTS; do
+    [ "$arg" = "$(slot_ssid "$s")" ] && { echo "$s"; return; }
+  done
+  echo ""
+}
+
+bring_up() {
+  local slot="$1" id; id=$(slot_id "$slot")
+  if [ -z "$(slot_ssid "$slot")" ]; then
+    echo "[err] $slot slot not configured (no ssid set)" >&2; exit 1
+  fi
+  if err=$(nmcli --wait 30 connection up "$id" 2>&1); then
+    echo "[ok] $slot ($id) associated; metric=50 owns the default route"
+    logger -t strix-wifi -p notice "$slot ($id) associated"
+  else
+    echo "[warn] $slot ($id) association failed: $err" >&2
+    logger -t strix-wifi -p warning "$slot ($id) association failed: $err"
+    exit 1
+  fi
+}
+
+require_wifi
+
+case "${1-}" in
+  on)
+    slot=$(first_configured)
+    [ -n "$slot" ] || { echo "[err] no Wi-Fi slot configured — run: strix-wifi list" >&2; exit 1; }
+    bring_up "$slot"
+    ;;
+  switch)
+    slot=$(resolve_slot "${2-}")
+    [ -n "$slot" ] || { echo "Usage: $0 switch {primary|secondary|tertiary}" >&2; exit 1; }
+    bring_up "$slot"
+    ;;
+  off)
+    conn=$(active_conn)
+    if [ -n "$conn" ]; then
+      nmcli --wait 5 connection down "$conn"
+      echo "[ok] $conn down; NM falls back to bond0 (metric=100)"
+      logger -t strix-wifi -p notice "$conn down, fell back to bond0"
+    else
+      echo "[noop] no active Wi-Fi on $DEV"
+    fi
+    ;;
+  status)
+    echo "── Default route ──"; ip -4 route show default; echo
+    echo "── Active connection on $DEV ──"
+    conn=$(active_conn)
+    echo "${conn:-(none)}"
+    ;;
+  list)
+    echo "── Wi-Fi slots ──"
+    for s in $SLOTS; do
+      ssid=$(slot_ssid "$s")
+      printf '  %-9s  %s\n' "$s" "${ssid:-(not configured)}"
+    done
+    ;;
+  set-primary)
+    target=$(resolve_slot "${2-}")
+    [ -n "$target" ] || { echo "Usage: $0 set-primary {primary|secondary|tertiary|SSID}" >&2; exit 1; }
+    [ -n "$(slot_ssid "$target")" ] || { echo "[err] ${2-} not configured (no ssid set)" >&2; exit 1; }
+    if [ "$target" = "primary" ]; then
+      echo "[noop] primary slot already holds $(slot_ssid primary)"; exit 0
+    fi
+    # Promote: the primary keyfile keeps id=wifi-primary / priority=100, so we
+    # swap the NETWORK payload — the [wifi] and [wifi-security] sections —
+    # between the primary file and the target file. Files rewritten 0600,
+    # then nmcli reload re-reads them.
+    pf=$(slot_file primary); tf=$(slot_file "$target")
+    ptmp=$(mktemp); ttmp=$(mktemp)
+    swap() {
+      local conn_src="$1" net_src="$2"
+      awk -F= '
+        /^\[/{s=$0; if(s=="[connection]"){c=1} else {c=0}}
+        c{print}
+      ' "$conn_src"
+      awk -F= '
+        /^\[/{s=$0; if(s=="[wifi]"||s=="[wifi-security]"){w=1} else {w=0}}
+        w{print}
+      ' "$net_src"
+      awk -F= '
+        /^\[/{s=$0; if(s=="[connection]"||s=="[wifi]"||s=="[wifi-security]"){o=0} else {o=1}}
+        o && NF{print}
+      ' "$conn_src"
+    }
+    swap "$pf" "$tf" >"$ptmp"
+    swap "$tf" "$pf" >"$ttmp"
+    install -m 0600 "$ptmp" "$pf"
+    install -m 0600 "$ttmp" "$tf"
+    rm -f "$ptmp" "$ttmp"
+    nmcli connection reload
+    echo "[ok] ${2-} promoted; primary slot now holds $(slot_ssid primary)"
+    logger -t strix-wifi -p notice "set-primary: ${2-} promoted into primary slot"
+    ;;
+  *) echo "Usage: $0 {on|off|switch <slot>|status|list|set-primary <slot|SSID>}" >&2; exit 1 ;;
+esac

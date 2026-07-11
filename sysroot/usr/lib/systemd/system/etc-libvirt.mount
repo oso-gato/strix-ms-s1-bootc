@@ -1,0 +1,25 @@
+# strix: persist libvirt CONFIG on the data drive (R7). Domain/network/pool
+# XML and daemon confs live in <strix-vm>/etc-libvirt and are bind-mounted
+# over /etc/libvirt, so VM definitions survive a preserve reinstall (the
+# system drive's /etc is wiped by reinstall; 3-way /etc merge only covers
+# bootc UPDATES, not reinstalls).
+#
+# strix-libvirt-seed populates the source dir from the image's /etc/libvirt
+# on first use (an empty bind source would hide the RPM-shipped defaults);
+# strix-libvirt-relabel restores SELinux labels after the bind lands.
+# nofail: if the data drive is absent, /etc/libvirt falls back to the image
+# content — libvirt runs with no machines defined rather than a dead boot.
+[Unit]
+Description=strix /etc/libvirt (bind from data drive: strix-vm/etc-libvirt)
+RequiresMountsFor=/var/lib/libvirt
+After=strix-libvirt-seed.service
+Wants=strix-libvirt-seed.service
+
+[Mount]
+What=/var/lib/libvirt/etc-libvirt
+Where=/etc/libvirt
+Type=none
+Options=bind,nofail
+
+[Install]
+WantedBy=local-fs.target

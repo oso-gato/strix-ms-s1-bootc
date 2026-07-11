@@ -1,0 +1,6 @@
+[Unit]
+Description=Daily claudebox refresh decision (rebuild if idle, defer if busy)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/claudebox-daily

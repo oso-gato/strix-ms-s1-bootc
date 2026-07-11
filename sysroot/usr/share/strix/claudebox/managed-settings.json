@@ -1,0 +1,30 @@
+{
+    "comment": "strix claudebox managed settings (R8/D11): auto mode + xhigh effort; CLI currency comes from the DAILY box rebuild, not self-update; the deny list enforces the house package discipline (host/box immutability) — no fleet-policy layer (out of scope, D10). Model + ultracode are session-scoped and live in the /usr/bin/claude wrapper (--model default = the recommended alias, never a fixed pin).",
+    "effortLevel": "xhigh",
+    "env": {
+        "DISABLE_UPDATES": "1",
+        "DISABLE_AUTOUPDATER": "1"
+    },
+    "permissions": {
+        "defaultMode": "auto",
+        "deny": [
+            "Bash(dnf copr:*)",
+            "Bash(distrobox-host-exec sudo dnf install:*)",
+            "Bash(distrobox-host-exec sudo dnf -y install:*)",
+            "Bash(distrobox-host-exec sudo rpm -i:*)",
+            "Bash(pip install --user:*)",
+            "Bash(pip3 install --user:*)",
+            "Bash(pipx install:*)",
+            "Bash(npm install -g:*)",
+            "Bash(npm i -g:*)",
+            "Bash(yarn global add:*)",
+            "Bash(pnpm add -g:*)",
+            "Bash(cargo install:*)",
+            "Bash(go install:*)",
+            "Bash(gem install:*)",
+            "Bash(brew install:*)",
+            "Bash(flatpak install:*)",
+            "Bash(snap install:*)"
+        ]
+    }
+}

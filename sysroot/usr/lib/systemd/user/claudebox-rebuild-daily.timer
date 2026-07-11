@@ -1,0 +1,15 @@
+# Daily cadence (R8/D11: Claude Code always @latest — the rebuild pulls the
+# newest CLI from Anthropic's repo). OnStartupSec also creates the box on the
+# first boot after install, with no operator action. core's user manager runs
+# at boot via linger (tmpfiles.d strix.conf).
+[Unit]
+Description=Daily claudebox refresh schedule
+
+[Timer]
+OnStartupSec=10min
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,23 @@
+# Interactive setup on the local console (first-one-wins vs the SSH path):
+# takes over tty1 while setup is pending. strix-setup's flock + the
+# .setup-done sentinel make tty1 and SSH mutually exclusive; the loser sees
+# the sentinel and no-ops.
+[Unit]
+Description=strix interactive first-boot setup on tty1 (first-one-wins)
+ConditionPathExists=!/var/home/.strix-secrets/.setup-done
+ConditionPathExists=/dev/tty1
+After=strix-firstboot-setup.service getty.target
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/strix-setup
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=multi-user.target

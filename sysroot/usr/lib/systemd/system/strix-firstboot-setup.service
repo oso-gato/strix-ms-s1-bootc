@@ -1,0 +1,18 @@
+# Every-boot orchestrator (R12): restore persisted credentials silently on a
+# preserve reinstall, enforce the sudo flip (R5), or publish the "run
+# strix-setup" MOTD on a fresh box. Runs on EVERY boot — the script is
+# idempotent and self-heals the sudoers bootstrap window after image updates.
+# No boot-2 gating: packages are baked, Wi-Fi exists on boot 1.
+[Unit]
+Description=strix firstboot orchestrator (restore-or-publish + sudo-flip enforcement)
+RequiresMountsFor=/var/home
+After=strix-home-seed.service network-online.target NetworkManager-wait-online.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/strix-firstboot-setup
+
+[Install]
+WantedBy=multi-user.target

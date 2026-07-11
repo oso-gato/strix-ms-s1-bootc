@@ -1,0 +1,21 @@
+# Populate the persistent /etc/libvirt payload (data drive) from the image's
+# RPM-shipped defaults, ONCE — before etc-libvirt.mount binds it over
+# /etc/libvirt. Runs every boot; the copy is guarded on the target being
+# empty, so an existing (preserve) payload is never touched.
+[Unit]
+Description=strix libvirt config seed (populate strix-vm/etc-libvirt once)
+RequiresMountsFor=/var/lib/libvirt
+Before=etc-libvirt.mount
+ConditionPathIsMountPoint=/var/lib/libvirt
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'mkdir -p /var/lib/libvirt/etc-libvirt; \
+  if [ -z "$(ls -A /var/lib/libvirt/etc-libvirt)" ]; then \
+    cp -a /etc/libvirt/. /var/lib/libvirt/etc-libvirt/ && \
+    logger -t strix-libvirt-seed -p notice "seeded etc-libvirt from image defaults"; \
+  fi'
+
+[Install]
+WantedBy=local-fs.target

@@ -1,0 +1,12 @@
+
+────────────────────────────────────────────────────────────────────
+  strix — bootc · bond0 LACP · Wi-Fi · Tailscale · Cockpit · KVM
+────────────────────────────────────────────────────────────────────
+
+  Web admin   : https://strix:9090   (system · containers · VMs · SELinux)
+  Wi-Fi       : sudo strix-wifi {on|off|switch|status|list|set-primary}
+  VPN         : tailscale status    (subnet router for 10.0.50.0/24)
+  OS updates  : automatic from ghcr.io (bootc); rollback: sudo bootc rollback
+  Claude      : claude              (daily-rebuilt claudebox, host untouched)
+  Shell       : logins land in the shared tmux workspace "main"
+────────────────────────────────────────────────────────────────────

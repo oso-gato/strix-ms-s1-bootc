@@ -1,0 +1,14 @@
+# Routing-table-100 default-route keeper (R3): bond0's keyfile statically
+# pins the v4 table-100 default via 10.0.50.1 and declares the v4+v6 fwmark
+# routing rules, but a static keyfile can't track a gateway that moves under
+# DHCP/RA and can't know the RA-learned v6 gateway. This oneshot re-points
+# table 100 at bond0's CURRENT gateway per family (idempotent via ip route
+# replace). The timer owns activation; no [Install] here.
+[Unit]
+Description=strix routing-table-100 default-route keeper (bond0 underlay pin)
+After=NetworkManager-wait-online.service tailscaled.service
+Wants=NetworkManager-wait-online.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/strix-table100

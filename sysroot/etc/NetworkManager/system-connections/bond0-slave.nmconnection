@@ -1,0 +1,14 @@
+[connection]
+id=bond0-slave
+type=ethernet
+master=bond0
+slave-type=bond
+autoconnect=true
+autoconnect-priority=200
+multi-connect=3
+
+[match]
+interface-name=enp97s0;enp98s0
+
+[ethernet]
+cloned-mac-address=preserve

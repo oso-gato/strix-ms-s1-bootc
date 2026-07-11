@@ -1,0 +1,13 @@
+# strix data drive p4 — logs (R9). journald self-caps; libvirt/qemu domain
+# logs land here via /var/log/libvirt.
+[Unit]
+Description=strix /var/log (data drive: strix-log)
+
+[Mount]
+What=/dev/disk/by-uuid/b6e4f0d8-5c7a-4e1b-8f9d-4a8c0b2e6d54
+Where=/var/log
+Type=xfs
+Options=noatime,nofail
+
+[Install]
+WantedBy=local-fs.target

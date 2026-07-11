@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# claudebox-rebuild              start a full box rebuild and follow it to completion
+# claudebox-rebuild --watch-only follow an already-running rebuild (claude wrapper)
+# The rebuild runs as a DETACHED user service (claudebox-rebuild-run.service)
+# so it outlives the box it recreates; this command only triggers + tails it —
+# Ctrl-C is safe (the rebuild keeps going).
+set -uo pipefail
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+run=claudebox-rebuild-run.service
+
+if [ "${1:-}" != "--watch-only" ]; then
+    systemctl --user reset-failed "$run" 2>/dev/null || true
+    echo ">> claudebox: starting rebuild — fresh image + latest Claude Code (~2-5 min)…"
+    systemctl --user start --no-block "$run"
+fi
+
+journalctl --user -u "$run" -f --no-pager &
+follower=$!
+trap 'kill "$follower" 2>/dev/null' EXIT INT TERM
+
+while systemctl --user is-active --quiet "$run"; do sleep 2; done
+kill "$follower" 2>/dev/null || true
+
+if systemctl --user is-failed --quiet "$run"; then
+    echo ">> claudebox rebuild FAILED — inspect: journalctl --user -u $run" >&2
+    exit 1
+fi
+echo ">> claudebox rebuild complete."
