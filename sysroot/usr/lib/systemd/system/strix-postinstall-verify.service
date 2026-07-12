@@ -36,6 +36,10 @@ ExecStart=/bin/sh -c 'test -f /lib/firmware/regulatory.db || { logger -t strix-v
 ExecStart=/bin/sh -c '[ "$(sysctl -n net.ipv4.ip_forward)" = "1" ] || { logger -t strix-verify -p err "ip_forward not enabled"; exit 1; }'
 ExecStart=/bin/sh -c '[ "$(sysctl -n net.ipv6.conf.all.forwarding)" = "1" ] || { logger -t strix-verify -p err "ipv6 forwarding not enabled"; exit 1; }'
 ExecStart=/bin/sh -c 'command -v tailscale >/dev/null || { logger -t strix-verify -p err "tailscale binary missing"; exit 1; }'
+# A14: once setup has onboarded tailscale (.setup-done), assert it is actually
+# FUNCTIONAL — Running + advertising 10.0.50.0/24 + --ssh (A13) — closing the
+# presence-vs-function gap the ultra-verify pass surfaced. No-ops pre-setup.
+ExecStart=/usr/bin/strix-verify-tailscale
 # R6: cockpit socket-activated on any-interface :9090; config hardening present.
 ExecStart=/bin/sh -c 'systemctl is-active --quiet cockpit.socket || { logger -t strix-verify -p err "cockpit.socket not active"; exit 1; }'
 ExecStart=/bin/sh -c 'ss -tlnH "sport = :9090" | grep -Eq "^LISTEN.*[[:space:]](\\*|0\\.0\\.0\\.0|\\[::\\]):9090[[:space:]]" || { logger -t strix-verify -p err "cockpit not listening on any-interface :9090"; exit 1; }'

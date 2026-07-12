@@ -1,0 +1,33 @@
+#!/bin/bash
+# strix-verify-tailscale — the R3/A13 FUNCTION check for strix-postinstall-verify
+# (amendment A14). The unit already checks PRESENCE (tailscale binary exists,
+# forwarding sysctls set); this adds the "is it actually DOING its job" check the
+# unit's own header demands ("verify a running system, not documentation") — a
+# box that boots with tailscaled down or logged-out must NOT pass.
+#
+# Gated on the setup sentinel: before the operator runs strix-setup, tailscaled
+# is legitimately logged-out (no onboarding yet), so this no-ops. Route APPROVAL
+# is operator/console-side (autoApprovers), so we assert ADVERTISEMENT (which the
+# box controls), not approval. Fail-loud into the journal under tag strix-verify.
+set -uo pipefail
+export LC_ALL=C
+
+SENTINEL=/var/home/.strix-secrets/.setup-done
+[ -f "$SENTINEL" ] || exit 0   # pre-onboarding: nothing to assert yet
+
+fail() { logger -t strix-verify -p err "$1"; echo "strix-verify-tailscale: $1" >&2; exit 1; }
+
+# (1) tailscaled actually Running (logged in + connected) — the core gap.
+state=$(tailscale status --json 2>/dev/null \
+  | python3 -c 'import json,sys; print((json.load(sys.stdin) or {}).get("BackendState",""))' 2>/dev/null || true)
+[ "$state" = Running ] || fail "tailscaled not Running after setup (BackendState=${state:-unreachable}; logged out?)"
+
+# (2) box configured for its actual jobs: advertising the subnet route (R3) and
+# Tailscale SSH on (A13). Read from the box's own prefs, not approval state.
+prefs=$(tailscale debug prefs 2>/dev/null || true)
+printf '%s' "$prefs" | grep -q '10\.0\.50\.0/24' \
+  || fail "subnet route 10.0.50.0/24 not advertised after setup (R3)"
+printf '%s' "$prefs" | grep -qE '"RunSSH":[[:space:]]*true' \
+  || fail "Tailscale SSH (--ssh, A13) not enabled after setup"
+
+logger -t strix-verify -p notice "tailscale function verified: Running + advertising 10.0.50.0/24 + --ssh"

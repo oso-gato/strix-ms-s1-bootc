@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.10.0 — 2026-07-12
+
+Verified milestone. Passed an ultra-verify pass (6 Opus dimensions +
+adversarial) measuring build+design against the full requirement set, plus
+two empirical layers now standing in CI:
+
+- **Unit tests** (`validation/unit-tests.sh`, 30 cases): extract each pure
+  function from the shipped scripts and exercise it — shadow-lock classifier,
+  tailnet-identity guard, Wi-Fi slot logic, gateway parser, firstboot.yaml
+  parser (incl. malformed→fallback), FIDO-aware key regex, A14 patterns.
+  shellcheck across shipped scripts: zero error-level issues.
+- **Host-environment integration** (`validation/vm-validate.sh`): installs +
+  boots both ISOs in real KVM and asserts the full requirement set; the
+  claudebox build runs as non-fatal bonus signal.
+
+Ultra-verify verdict: well-built AND fit-for-purpose; zero confirmed code
+defects (R1–R14 / A1–A13 traceability closes). One improvement applied:
+
+- **A14**: `strix-postinstall-verify` now checks tailscale FUNCTION, not just
+  presence — once setup has onboarded (`.setup-done`), it asserts tailscaled
+  Running + `10.0.50.0/24` advertised + `--ssh` on. Closes the "a logged-out
+  box passes verification" gap.
+
+Everything else the pass flagged is verification-depth deferred to the live
+MS-S1 MAX (bond0/LACP, MT7925 Wi-Fi, SMART, tailnet-dependent units).
+
 ## v0.1.0 — 2026-07-12
 
 Pre-validation series (operator re-designation: nothing has booted on the

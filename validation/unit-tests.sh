@@ -102,6 +102,19 @@ sys.exit(1 if bad else 0)
 PY
 if python3 "$tmp/pat.py"; then ok "key regex: 6/6 cases (ed25519, rsa, FIDO sk-*, ecdsa, comment, junk)"; else bad "key regex mismatch" "see above"; fi
 
+echo "═══ strix-verify-tailscale: A14 assertion patterns (against mock prefs) ═══"
+# sentinel gate: no .setup-done → helper must exit 0 (no-op pre-onboarding).
+# We can't call tailscale here, so test the load-bearing grep patterns directly.
+good_prefs='{"AdvertiseRoutes":["10.0.50.0/24"],"RunSSH":true,"WantRunning":true}'
+bad_prefs='{"AdvertiseRoutes":[],"RunSSH":false}'
+printf '%s' "$good_prefs" | grep -q '10\.0\.50\.0/24'          && ok "A14: advertised-route pattern matches configured box" || bad "A14 route pattern" "no match"
+printf '%s' "$good_prefs" | grep -qE '"RunSSH":[[:space:]]*true' && ok "A14: --ssh pattern matches RunSSH:true"              || bad "A14 ssh pattern" "no match"
+printf '%s' "$bad_prefs"  | grep -q '10\.0\.50\.0/24'          && bad "A14: route pattern false-matched empty routes" "matched" || ok "A14: route pattern rejects unconfigured box"
+printf '%s' "$bad_prefs"  | grep -qE '"RunSSH":[[:space:]]*true' && bad "A14: ssh pattern false-matched RunSSH:false" "matched"  || ok "A14: ssh pattern rejects --ssh off"
+# BackendState extraction (the core 'is it Running' check)
+echo '{"BackendState":"Running","Self":{}}' | python3 -c 'import json,sys; sys.exit(0 if (json.load(sys.stdin) or {}).get("BackendState")=="Running" else 1)' && ok "A14: BackendState=Running detected" || bad "A14 BackendState" "not Running"
+echo '{"BackendState":"NeedsLogin"}' | python3 -c 'import json,sys; sys.exit(0 if (json.load(sys.stdin) or {}).get("BackendState")=="Running" else 1)' && bad "A14: NeedsLogin passed as Running" "false-ok" || ok "A14: logged-out (NeedsLogin) correctly fails"
+
 rm -rf "$tmp"
 echo
 echo "═══ UNIT TESTS: $PASS passed, $FAIL failed ═══"

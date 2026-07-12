@@ -91,6 +91,7 @@ RUN chmod 0600 /etc/NetworkManager/system-connections/*.nmconnection \
     && chmod 0755 /usr/bin/strix-wifi /usr/bin/strix-setup \
                   /usr/bin/strix-firstboot-setup /usr/bin/strix-table100 \
                   /usr/bin/strix-keys-sync /usr/bin/cockpit-tailnet-serve \
+                  /usr/bin/strix-verify-tailscale \
                   /usr/bin/claude \
                   /usr/bin/claudebox-rebuild /usr/bin/claudebox-daily \
                   /usr/share/strix/claudebox/claudebox-init.sh
