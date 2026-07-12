@@ -20,9 +20,13 @@ distrobox enter "$BOX" -- sudo sh -c \
   || distrobox enter "$BOX" -- sudo sh -c \
   "printf 'export CONTAINER_HOST=unix:///run/user/\$(id -u)/podman/podman.sock\n' > /etc/profile.d/strix-container-host.sh"
 
-# (2) Managed settings (read-only to the in-box user).
+# (2) Managed settings (read-only to the in-box user). $SRC is a HOST path;
+# inside the box /usr is the toolbox's OWN filesystem, so a `cp $SRC/...`
+# run in-box can't see it (VM integration test caught this). PIPE the host
+# file into the box via stdin — the redirection is evaluated host-side where
+# $SRC is valid, and cat writes it in-box.
 distrobox enter "$BOX" -- sudo mkdir -p /etc/claude-code
-distrobox enter "$BOX" -- sudo cp "$SRC/managed-settings.json" /etc/claude-code/managed-settings.json
+distrobox enter "$BOX" -- sudo sh -c 'cat > /etc/claude-code/managed-settings.json' < "$SRC/managed-settings.json"
 distrobox enter "$BOX" -- sudo chmod 0644 /etc/claude-code/managed-settings.json
 
 echo "claudebox-init: bridges + managed settings applied."
