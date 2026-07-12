@@ -98,9 +98,20 @@ The guest needs Mesa's virtio-gpu/Venus drivers (any current Linux guest);
 libvirt grants the qemu process the render node itself (device ACL + svirt).
 Headless-safe: Venus renders via RADV directly on the render node, no compositor.
 
-**Live-host checks (GPU items — CI proves stack + container device access only):**
+**Unified memory (R15 Phase 2):** the GPU's share of the 128 GB is a dynamic
+**ceiling** — `ttm.pages_limit=31457280` (120 GiB) via
+`/usr/lib/bootc/kargs.d/10-strix-uma.toml`; pages pin only while a model holds
+them and reclaim on release. Change the ceiling = edit that one line, rebuild,
+`bootc upgrade`. BIOS: keep the iGPU/UMA frame buffer at 512 MB (a BIOS
+carveout is the only *static* reservation). Live check:
+`cat /sys/module/ttm/parameters/pages_limit` → `31457280`, and an AI container
+reports ~120 GiB available GPU memory.
+
+**Live-host checks (GPU items — CI proves stack + container device access +
+the ceiling karg only):**
 `vulkaninfo --summary | grep -i radv` (RADV sees gfx1151) · a VA-API transcode in a
-container · ROCm device visible in an AI container · Venus accel in a test VM.
+container · ROCm device visible in an AI container (~120 GiB reported) · Venus
+accel in a test VM.
 
 ## 4. Operating notes
 

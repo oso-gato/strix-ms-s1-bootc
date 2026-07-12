@@ -21,6 +21,7 @@
 | System drive | 2 TB WD_BLACK SN850X, serial `25281F806642` | install target — serial-pinned + `%pre`-guarded |
 | Data drive | 4 TB WD_BLACK SN850X, serial `25278B803296` | permanent: home/containers/vm/log (R9) |
 | BIOS | AMI Aptio; **IOMMU enabled by default** | required by NPU SVA **and** libvirt/KVM — never disable |
+| BIOS (UMA) | iGPU/UMA frame buffer size | set to the **minimum (512 MB)** — a large BIOS carveout is a *static* reservation permanently stolen from the 128 GB pool; the dynamic GPU share comes from GTT under the R15 ceiling (`ttm.pages_limit` = 120 GiB), not from BIOS VRAM |
 
 ### Storage slots — IMPORTANT asymmetry
 Two M.2 2280 slots, not equal: **slot 1 = PCIe 4.0 x4** (~7 GB/s), **slot 2 =

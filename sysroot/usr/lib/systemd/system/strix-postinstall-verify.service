@@ -59,6 +59,8 @@ ExecStart=/bin/sh -c 'systemctl is-active --quiet bootc-fetch-apply-updates.time
 # R15: shared-GPU stack baked (VM half) + container half enabled.
 ExecStart=/bin/sh -c 'test -f /usr/lib64/qemu/hw-display-virtio-gpu-gl.so && test -f /usr/lib64/libvulkan_radeon.so || { logger -t strix-verify -p err "VM GPU-accel stack missing (virtio-gpu-gl / RADV)"; exit 1; }'
 ExecStart=/bin/sh -c 'getsebool container_use_devices 2>/dev/null | grep -q " on$" || { logger -t strix-verify -p err "container_use_devices off — containers cannot reach /dev/dri//dev/kfd (R15)"; exit 1; }'
+# R15 Phase 2: the unified-memory ceiling karg is live on the booted kernel.
+ExecStart=/bin/sh -c 'grep -q "ttm.pages_limit=31457280" /proc/cmdline || { logger -t strix-verify -p err "unified-memory ceiling karg missing from cmdline (R15/A18)"; exit 1; }'
 # R1: host immutable at runtime — the booted deployment carries ZERO layered
 # packages (rpm-ostree prints a LayeredPackages line only when layering exists).
 ExecStart=/bin/sh -c '! rpm-ostree status --booted | grep -q "LayeredPackages:" || { logger -t strix-verify -p err "runtime package layering detected — R1 forbids host mutation outside the image"; exit 1; }'

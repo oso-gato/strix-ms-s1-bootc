@@ -139,6 +139,20 @@ grep -q 'LayeredPackages' "$HERE/sysroot/usr/lib/systemd/system/strix-postinstal
 # check INSTALL lines only (the R1 comment legitimately names the dropped pkg)
 grep -vE '^\s*#' "$CF" | grep -q 'libva-utils' && bad "libva-utils crept into the install list (R1)" "present" || ok "no libva-utils installed (R1 minimalism holds)"
 
+echo "═══ R15 Phase 2: unified-memory ceiling karg ═══"
+KT="$HERE/sysroot/usr/lib/bootc/kargs.d/10-strix-uma.toml"
+test -f "$KT" && ok "kargs.d drop-in present" || bad "kargs.d drop-in missing" ""
+python3 - "$KT" <<'PY' && ok "TOML valid; ceiling=120GiB (31457280 pages); x86_64-scoped" || bad "kargs TOML wrong" "see parse"
+import sys, tomllib
+d = tomllib.load(open(sys.argv[1], 'rb'))
+assert d['kargs'] == ['ttm.pages_limit=31457280'], d['kargs']
+assert d['match-architectures'] == ['x86_64'], d.get('match-architectures')
+# 31457280 pages * 4096 B = 120 GiB exactly
+assert 31457280 * 4096 == 120 * 1024**3
+PY
+grep -q 'ttm.pages_limit=31457280' "$HERE/sysroot/usr/lib/systemd/system/strix-postinstall-verify.service" && ok "verify unit asserts the ceiling karg" || bad "verify missing ceiling assert" ""
+grep -vE '^\s*#' "$KT" | grep -qE 'amd_iommu|gttsize|page_pool' && bad "excluded karg crept in (A18 exclusions)" "present" || ok "exclusions hold (no amd_iommu=off / gttsize / page_pool_size)"
+
 rm -rf "$tmp"
 echo
 echo "═══ UNIT TESTS: $PASS passed, $FAIL failed ═══"

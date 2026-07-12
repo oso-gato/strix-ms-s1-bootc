@@ -25,6 +25,15 @@ exercises the container-GPU path (virtio-gpu node in the harness VM + a rootless
 container opening `/dev/dri` under SELinux); Venus-on-amdgpu, ROCm, and VA-API
 remain live-host checks. Phase 2 (dynamic unified-memory ceiling) follows.
 
+**Dynamic unified memory (A18 — R15 Phase 2, operator ceiling = 120 GiB):**
+`ttm.pages_limit=31457280` via a bootc kargs.d drop-in raises the GPU-mappable
+share of the 128 GB from the kernel's ~50% default (~64 GiB) to a 120 GiB
+ceiling — dynamic/reclaimable, never a reservation; ~7.5 GiB stays un-pinnable
+so the host + a light VM survive a max-size model load. BIOS UMA note added
+(512 MB minimum). `amd_iommu=off`, `amdgpu.gttsize` (deprecated), and
+`ttm.page_pool_size` deliberately excluded. Karg asserted on the booted
+cmdline by the verify unit and CI.
+
 **Pre-ship minimalism corrections:**
 - **A16**: removed smartmontools/smartd — redundant. `cockpit-storaged` (via
   udisks2 2.11 + libblockdev-nvme) already surfaces NVMe SMART/health with no

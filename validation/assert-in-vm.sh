@@ -83,6 +83,7 @@ chk "rootless container opens /dev/dri (R15 container half)" \
     podman run --rm --device /dev/dri registry.fedoraproject.org/fedora-minimal:44 \
     sh -c 'ls /dev/dri/renderD*'
 chk "R1: zero layered packages (immutable host)" sh -c '! rpm-ostree status --booted | grep -q LayeredPackages:'
+chk "R15-P2: unified-memory ceiling karg live in cmdline" sh -c 'grep -q "ttm.pages_limit=31457280" /proc/cmdline'
 
 echo "── R11/R13: updates + daemons ──"
 chk "bootc tracks ghcr ref"              sh -c 'bootc status 2>/dev/null | grep -q "ghcr.io/oso-gato/strix-ms-s1-bootc"'

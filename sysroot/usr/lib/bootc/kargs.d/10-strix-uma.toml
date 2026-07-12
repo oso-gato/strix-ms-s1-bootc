@@ -1,0 +1,19 @@
+# R15 Phase 2 (A18) — dynamic unified-memory allocation for the AI substrate.
+#
+# The kernel defaults the GPU-mappable share of unified memory (GTT/TTM) to
+# ~50% of RAM — only ~64 GiB of the 128 GiB. ttm.pages_limit raises that to a
+# 120 GiB CEILING (operator-selected): pages are pinned only while a workload
+# holds them and are reclaimed on release — a ceiling, never a reservation, so
+# idle cost is zero and VMs/containers/host draw freely from the same pool.
+# 128−120 = ~7.5 GiB (after the 512 MB BIOS carveout) can never be GPU-pinned,
+# keeping the host + a light VM alive even at a max-size model load.
+#
+# Value: 120 GiB × 262144 pages/GiB = 31457280 (4 KiB pages). Change = edit
+# this line, rebuild, `bootc upgrade`, reboot.
+# Deliberately NOT set (recorded in A18): amd_iommu=off (conflicts with the
+# IOMMU-on requirement for NPU SVA + libvirt), amdgpu.gttsize (deprecated on
+# kernel ≥6.17 — ttm.pages_limit is the single knob), ttm.page_pool_size
+# (optional perf cache; excluded per R1 minimalism until measured need).
+# BIOS dependency: UMA frame buffer = 512 MB minimum (HARDWARE.md).
+kargs = ["ttm.pages_limit=31457280"]
+match-architectures = ["x86_64"]
