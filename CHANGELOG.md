@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.10.1 — 2026-07-12
+
+Hardware-invariant validation against noir (the FCOS predecessor running on the
+SAME physical MS-S1 MAX — L3-proven) + kernel L1. Cross-check found strix's
+bond0/LACP, MT7925 Wi-Fi, and NVMe-drive config **byte-exact to noir's proven
+settings**, and an ultra-verify fan-out refuted every FCOS→bootc mechanism
+concern (interface names come from systemd/udev not the kernel; the 6.19→7.1.3
+change touched only Bluetooth, not the mt7925e Wi-Fi driver; drives mount by
+UUID). ZERO gaps in the config. One hardening applied:
+
+- **A15**: `udevadm settle` at the top of the kickstart `%pre`, before the
+  drive-identity guard resolves `/dev/disk/by-id` — deterministic on real
+  hardware where the two asymmetric-lane NVMes may enumerate late.
+
+(A6 drive-health confirmed delivered by smartmontools' packaged DEVICESCAN
+default — no smartd.conf needed. GPU/unified-memory support remains research,
+not built — no written requirement yet.)
+
 ## v0.10.0 — 2026-07-12
 
 Verified milestone. Passed an ultra-verify pass (6 Opus dimensions +

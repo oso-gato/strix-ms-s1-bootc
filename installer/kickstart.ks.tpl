@@ -48,6 +48,14 @@ reboot
 set -eu
 export LC_ALL=C
 
+# R10 hardening: settle udev so /dev/disk/by-id/nvme-* symlinks are populated
+# before the identity guard resolves them. The Anaconda %pre environment runs
+# early, and on the two asymmetric-lane NVMes (x4 + x1 slots) enumeration
+# timing is not guaranteed — a not-yet-created by-id symlink would trip
+# check_drive's `[ -e "$symlink" ]` into a spurious fail-closed abort. (noir's
+# guard ran later, under coreos-installer's settled live env; %pre is earlier.)
+udevadm settle || sleep 3
+
 WIPE=@WIPE@
 
 TARGET="/dev/disk/by-id/nvme-WD_BLACK_SN850X_2000GB_25281F806642"
