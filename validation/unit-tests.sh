@@ -115,6 +115,20 @@ printf '%s' "$bad_prefs"  | grep -qE '"RunSSH":[[:space:]]*true' && bad "A14: ss
 echo '{"BackendState":"Running","Self":{}}' | python3 -c 'import json,sys; sys.exit(0 if (json.load(sys.stdin) or {}).get("BackendState")=="Running" else 1)' && ok "A14: BackendState=Running detected" || bad "A14 BackendState" "not Running"
 echo '{"BackendState":"NeedsLogin"}' | python3 -c 'import json,sys; sys.exit(0 if (json.load(sys.stdin) or {}).get("BackendState")=="Running" else 1)' && bad "A14: NeedsLogin passed as Running" "false-ok" || ok "A14: logged-out (NeedsLogin) correctly fails"
 
+echo "═══ claudebox startup settings (recommended model + ultracode + auto mode) ═══"
+# Offline-provable layer (per claude-code-guide, there is NO runtime config
+# introspection without an authenticated session — /status,/permissions,/effort
+# are the on-box runtime proof). These assert the box is CONFIGURED so all three
+# take effect: wrapper flags + managed-settings keys + NO model override that
+# could outrank --model default. Highest-precedence managed layer + version-
+# robust --settings method (not --effort) verified L1 by the fan-out.
+W="$HERE/sysroot/usr/bin/claude"; M="$HERE/sysroot/usr/share/strix/claudebox/managed-settings.json"
+grep -q -- '--model default' "$W"                 && ok "wrapper passes --model default (recommended model)" || bad "wrapper --model default" "absent"
+grep -q 'ultracode' "$W"                          && ok "wrapper injects ultracode (session effort)"          || bad "wrapper ultracode" "absent"
+python3 -c "import json;d=json.load(open('$M'));import sys;sys.exit(0 if d['permissions']['defaultMode']=='auto' else 1)"       && ok "managed: permissions.defaultMode=auto" || bad "defaultMode" "not auto"
+python3 -c "import json;d=json.load(open('$M'));import sys;sys.exit(0 if d.get('effortLevel')=='xhigh' else 1)"                 && ok "managed: effortLevel=xhigh (ultracode floor)" || bad "effortLevel" "not xhigh"
+python3 -c "import json;d=json.load(open('$M'));import sys;sys.exit(1 if ('model' in d or 'model' in d.get('permissions',{})) else 0)" && ok "managed: NO model override (—model default wins)" || bad "model override present" "would outrank --model default"
+
 rm -rf "$tmp"
 echo
 echo "═══ UNIT TESTS: $PASS passed, $FAIL failed ═══"

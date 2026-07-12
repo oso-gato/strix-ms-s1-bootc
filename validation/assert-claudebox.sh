@@ -49,8 +49,13 @@ chk "claude-code rpm installed in box"   distrobox enter claudebox -- rpm -q cla
 chk "claude on PATH in box"              distrobox enter claudebox -- sh -lc 'command -v claude'
 chk "claude --version runs in box"       sh -c 'timeout 40 distrobox enter claudebox -- sh -lc "claude --version"'
 chk "CONTAINER_HOST bridge wired"        sh -c 'distrobox enter claudebox -- sh -lc "echo \$CONTAINER_HOST" | grep -q "podman/podman.sock"'
-chk "managed-settings.json in box"       distrobox enter claudebox -- test -f /etc/claude-code/managed-settings.json
-chk "managed-settings: auto mode"        sh -c 'distrobox enter claudebox -- cat /etc/claude-code/managed-settings.json | grep -q "\"defaultMode\": \"auto\""'
+echo "── startup settings IN THE BUILT BOX: recommended model + ultracode + auto mode ──"
+chk "managed-settings.json present in box"  distrobox enter claudebox -- test -f /etc/claude-code/managed-settings.json
+chk "in-box managed: defaultMode=auto"      sh -c 'distrobox enter claudebox -- cat /etc/claude-code/managed-settings.json | grep -qE "\"defaultMode\":[[:space:]]*\"auto\""'
+chk "in-box managed: effortLevel=xhigh"     sh -c 'distrobox enter claudebox -- cat /etc/claude-code/managed-settings.json | grep -qE "\"effortLevel\":[[:space:]]*\"xhigh\""'
+chk "in-box managed: NO model override"     sh -c '! distrobox enter claudebox -- grep -qE "\"model\"[[:space:]]*:" /etc/claude-code/managed-settings.json'
+chk "host wrapper passes --model default"   grep -q -- '--model default' /usr/bin/claude
+chk "host wrapper injects ultracode"        grep -q 'ultracode' /usr/bin/claude
 
 echo
 if [ "$FAILS" -gt 0 ]; then
