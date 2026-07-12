@@ -1,31 +1,30 @@
 # Changelog
 
-## v0.10.1 — 2026-07-12
-
-Minimalism correction + hardware-invariant validation. The cross-check of
-strix's bond0/LACP, MT7925 Wi-Fi, and NVMe-drive config against noir (the FCOS
-predecessor running on the SAME physical MS-S1 MAX — L3-proven) found it
-**byte-exact to noir's proven settings**, and an ultra-verify fan-out refuted
-every FCOS→bootc mechanism concern (interface names come from systemd/udev not
-the kernel; the 6.19→7.1.3 change touched only Bluetooth, not the mt7925e Wi-Fi
-driver; drives mount by UUID). **Zero gaps.**
-
-- **A16**: **removed smartmontools/smartd** — redundant. `cockpit-storaged`
-  (via udisks2 2.11 + libblockdev-nvme) already surfaces NVMe SMART/health with
-  no smartmontools dependency, and `nvme-cli` (in the base) covers the CLI;
-  smartd's only extra was journal-logging whose alerts dead-ended (no MTA).
-  Dropped from the package list, service enablement, and verify assertion;
-  `cockpit-storaged` stays as the health surface.
-- **A15**: a proposed `udevadm settle` in `%pre` was **reconsidered and
-  withdrawn** — not required (R10 is the guard itself; every prior run resolved
-  by-id without it; a race fails safe).
-
-(GPU/unified-memory support remains research, not built — no written
-requirement yet.)
-
 ## v0.10.0 — 2026-07-12
 
-Verified milestone. Passed an ultra-verify pass (6 Opus dimensions +
+Verified milestone (pre-ship — still tidying under this version; not yet
+deployed on hardware).
+
+**Hardware-invariant cross-check vs noir** (the FCOS predecessor running on the
+SAME physical MS-S1 MAX — L3-proven): strix's bond0/LACP, MT7925 Wi-Fi, and
+NVMe-drive config is **byte-exact to noir's proven settings — zero gaps**; an
+ultra-verify fan-out refuted every FCOS→bootc mechanism concern (interface
+names come from systemd/udev not the kernel; the 6.19→7.1.3 change touched only
+Bluetooth, not the mt7925e Wi-Fi driver; drives mount by UUID).
+
+**Pre-ship minimalism corrections:**
+- **A16**: removed smartmontools/smartd — redundant. `cockpit-storaged` (via
+  udisks2 2.11 + libblockdev-nvme) already surfaces NVMe SMART/health with no
+  smartmontools dependency, and `nvme-cli` (base) covers the CLI; smartd's only
+  extra was journal-logging whose alerts dead-ended (no MTA). `cockpit-storaged`
+  stays as the health surface.
+- **A15**: a proposed `%pre` `udevadm settle` was reconsidered and withdrawn —
+  not required (R10 is the guard; every prior run resolved by-id without it; a
+  race fails safe).
+- GPU/unified-memory (AI) support remains research, not built — no written
+  requirement yet.
+
+Passed an ultra-verify pass (6 Opus dimensions +
 adversarial) measuring build+design against the full requirement set, plus
 two empirical layers now standing in CI:
 
