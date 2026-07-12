@@ -54,10 +54,13 @@ COPY sysroot/ /
 #   firstboot        : gh (device-flow pull of firstboot.yaml, R12),
 #                      python3 + python3-pyyaml (parse firstboot.yaml)
 #   net tooling      : ethtool (tailscale-udp-gro unit)
-#   ops (A6)         : smartmontools (smartd — the only thing watching the
-#                      "permanent" 4 TB drive's health; journal alerts),
-#                      tcpdump+mtr (router 2am kit — real-root raw sockets,
+#   ops (A6)         : tcpdump+mtr (router 2am kit — real-root raw sockets,
 #                      the class the rootless claudebox can't do),
+#                      (A16: smartmontools REMOVED — cockpit-storaged surfaces
+#                      NVMe SMART/health via udisks2 2.11 + libblockdev-nvme
+#                      with no smartmontools dep, and nvme-cli in the base
+#                      covers the CLI; smartd's only extra was journal-logging
+#                      whose alerts dead-ended (no MTA). Less-is-more.)
 #                      pcp (pmcd/pmlogger collectors + pmproxy REST API —
 #                      Fedora 44 retired the cockpit-pcp package; the
 #                      metrics-history page ships in cockpit-system and
@@ -78,7 +81,7 @@ RUN dnf -y --setopt=install_weak_deps=False install \
         swtpm edk2-ovmf qemu-device-usb-host qemu-device-usb-redirect \
         tmux mosh fastfetch distrobox flatpak-session-helper gh \
         python3 python3-pyyaml ethtool \
-        smartmontools tcpdump mtr pcp rsync bash-completion \
+        tcpdump mtr pcp rsync bash-completion \
         policycoreutils-python-utils \
     && dnf clean all \
     && rm -rf /var/log/* /var/cache/* /var/lib/dnf
@@ -124,7 +127,7 @@ RUN systemctl enable \
         strix-postinstall-verify.service tailscale-udp-gro.service \
         cockpit-tailnet-serve.service \
         strix-table100.timer strix-keys-sync.timer \
-        smartd.service pmcd.service pmlogger.service pmproxy.service \
+        pmcd.service pmlogger.service pmproxy.service \
     && systemctl --global enable claudebox-rebuild-daily.timer podman.socket
 # (--global podman.socket: every user gets a rootless podman API socket at
 #  /run/user/<uid>/podman/podman.sock — the claudebox CONTAINER_HOST bridge.)

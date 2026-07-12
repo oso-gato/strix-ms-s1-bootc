@@ -15,7 +15,7 @@ After=var-home.mount var-lib-containers.mount var-lib-libvirt.mount var-log.moun
 # Ordering-only edges to the asserted daemons (no Wants/Requires): a failed
 # daemon job releases the edge immediately, so genuine breakage still fails
 # loudly — but a healthy Type=notify startup can't race the assertion.
-After=smartd.service pmcd.service pmlogger.service pmproxy.service
+After=pmcd.service pmlogger.service pmproxy.service
 
 [Service]
 Type=oneshot
@@ -45,8 +45,8 @@ ExecStart=/bin/sh -c 'systemctl is-active --quiet cockpit.socket || { logger -t 
 ExecStart=/bin/sh -c 'ss -tlnH "sport = :9090" | grep -Eq "^LISTEN.*[[:space:]](\\*|0\\.0\\.0\\.0|\\[::\\]):9090[[:space:]]" || { logger -t strix-verify -p err "cockpit not listening on any-interface :9090"; exit 1; }'
 ExecStart=/bin/sh -c 'grep -Eq "^[[:space:]]*LoginTo[[:space:]]*=[[:space:]]*false" /etc/cockpit/cockpit.conf || { logger -t strix-verify -p err "cockpit.conf missing LoginTo=false"; exit 1; }'
 ExecStart=/bin/sh -c 'rpm -q cockpit-bridge cockpit-system cockpit-ws cockpit-podman cockpit-networkmanager cockpit-files cockpit-ostree cockpit-selinux cockpit-machines cockpit-storaged >/dev/null || { logger -t strix-verify -p err "cockpit subpackage(s) missing"; exit 1; }'
-# A6 ops daemons: drive-health watch + historical metrics collectors.
-ExecStart=/bin/sh -c 'systemctl is-active --quiet smartd.service || { logger -t strix-verify -p err "smartd not active (drive health unwatched)"; exit 1; }'
+# A6 ops daemons: historical metrics collectors. (A16: drive-health is
+# surfaced by cockpit-storaged via udisks2 — no smartd asserted.)
 ExecStart=/bin/sh -c 'systemctl is-active --quiet pmcd.service && systemctl is-active --quiet pmlogger.service && systemctl is-active --quiet pmproxy.service || { logger -t strix-verify -p err "pcp collectors/pmproxy not active (no metrics history)"; exit 1; }'
 # R7: libvirt sockets live.
 ExecStart=/bin/sh -c 'for s in virtqemud virtnetworkd virtstoraged virtnodedevd virtlogd; do systemctl is-active --quiet "$s.socket" || { logger -t strix-verify -p err "libvirt socket $s.socket not active"; exit 1; }; done'

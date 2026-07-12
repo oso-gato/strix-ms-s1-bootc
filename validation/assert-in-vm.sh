@@ -100,14 +100,10 @@ if systemctl is-failed --quiet strix-postinstall-verify.service; then
 else
   bad "verify unit not in failed state (ActiveState=$(systemctl show -p ActiveState --value strix-postinstall-verify.service)); recent strix-verify: $(journalctl -t strix-verify -b --no-pager | tail -2)"
 fi
-systemctl is-active --quiet smartd.service \
-  && ok "smartd active (QEMU NVMe exposes SMART)" \
-  || ok "smartd not active in VM (no SMART-capable device — live-host item, not a defect here)"
-
 echo ""
 if [ "$FAILS" -gt 0 ]; then
   echo "── diagnostics for the failing units (auto-dumped on any FAIL) ──"
-  for u in pmcd pmlogger pmproxy strix-postinstall-verify smartd; do
+  for u in pmcd pmlogger pmproxy strix-postinstall-verify; do
     echo "### $u.service"
     systemctl --no-pager --full status "$u.service" 2>&1 | head -12 || true
     journalctl -u "$u.service" -b --no-pager 2>/dev/null | tail -8 || true
