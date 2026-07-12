@@ -22,12 +22,25 @@ chk "claude wrapper present on host"     test -x /usr/bin/claude
 # R8 host-immutability: the claude-code CLI must live ONLY in the box.
 chk "host immutability: claude-code NOT rpm-installed on host"  sh -c '! rpm -q claude-code'
 
-echo "── build the claudebox (pull toolbox:44 + dnf claude-code; minutes) ──"
-if /usr/bin/claudebox-rebuild; then
-  ok "claudebox-rebuild completed"
+echo "── rootless-podman preflight (classify flake vs defect up front) ──"
+podman info >/tmp/cb-podman.log 2>&1 \
+  && ok "rootless podman works for core" \
+  || { bad "rootless podman broken for core"; tail -15 /tmp/cb-podman.log; }
+
+echo "── build the claudebox DIRECTLY (distrobox assemble; capture real output) ──"
+# Direct assemble (not the detached user service) so the actual error is
+# visible — the user-service path's journal was unreadable over SSH.
+bc_rc=0
+distrobox assemble create --file /usr/share/strix/claudebox/distrobox.ini >/tmp/cb-build.log 2>&1 || bc_rc=$?
+if [ "$bc_rc" -eq 0 ]; then
+  ok "distrobox assemble created the box"
+  ic_rc=0
+  /usr/share/strix/claudebox/claudebox-init.sh >/tmp/cb-init.log 2>&1 || ic_rc=$?
+  [ "$ic_rc" -eq 0 ] && ok "claudebox-init applied bridges + settings" \
+    || { bad "claudebox-init FAILED (rc=$ic_rc)"; echo "--- claudebox-init output ---"; tail -20 /tmp/cb-init.log; }
 else
-  bad "claudebox-rebuild FAILED — journal below (network flake vs real defect)"
-  journalctl --user -u claudebox-rebuild-run.service --no-pager 2>/dev/null | tail -50
+  bad "distrobox assemble FAILED (rc=$bc_rc) — real error below"
+  echo "--- last 35 lines of assemble output ---"; tail -35 /tmp/cb-build.log
 fi
 
 echo "── in-box: Claude Code actually present + launchable ──"
