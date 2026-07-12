@@ -136,7 +136,8 @@ grep -q 'mesa-vulkan-drivers' "$CF"                && ok "Containerfile installs
 grep -q 'strix-gpu-selinux.service' "$CF"          && ok "strix-gpu-selinux enabled in image" || bad "gpu-selinux not enabled" ""
 grep -q 'container_use_devices' "$HERE/sysroot/usr/lib/systemd/system/strix-gpu-selinux.service" && ok "gpu-selinux sets container_use_devices" || bad "boolean not set by unit" ""
 grep -q 'LayeredPackages' "$HERE/sysroot/usr/lib/systemd/system/strix-postinstall-verify.service" && ok "verify asserts R1 zero-layering" || bad "R1 layering assertion missing" ""
-grep -q 'libva-utils' "$CF" && bad "libva-utils crept in (R1 minimalism)" "present" || ok "no libva-utils (R1 minimalism holds)"
+# check INSTALL lines only (the R1 comment legitimately names the dropped pkg)
+grep -vE '^\s*#' "$CF" | grep -q 'libva-utils' && bad "libva-utils crept into the install list (R1)" "present" || ok "no libva-utils installed (R1 minimalism holds)"
 
 rm -rf "$tmp"
 echo
