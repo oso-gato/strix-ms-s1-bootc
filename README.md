@@ -20,21 +20,36 @@ strix succeeds [`noir-strix-halo-fcos`](https://github.com/oso-gato/noir-strix-h
 - **Updates**: the box auto-applies from the registry (`bootc`), reboots, and
   keeps the previous image for one-command rollback (`sudo bootc rollback`).
   Local config (`/etc`) survives updates; `/var` is never touched.
-- **Install**: CI Releases carry two USB installers built from the same image:
+- **Install**: two USB installers built from the same image:
   - `strix-wipe.iso` — first install / migration: recreates the 4 TB data
     drive (home 2000 GiB · containers 825 GiB · vm 825 GiB · log rest ≈ 75 GiB).
   - `strix-preserve.iso` — reinstall: keeps the data drive (match-or-halt);
     the box comes back with homes, containers, **VMs**, credentials, and
     tailnet identity intact.
   Both refuse the wrong disk: a `%pre` guard verifies drive serial + size +
-  model before anything is written.
+  model before anything is written. Three ways to get a whole ISO — see
+  **Getting the ISO** below.
+
+## Getting the ISO
+
+Each ISO is ~2.2 GiB. Pick whichever suits you — all three yield an identical
+whole `strix-wipe.iso`:
+
+1. **From ghcr as a single file (no cap, no reassembly)** — the installer is
+   published alongside the container image as an OCI artifact:
+   ```bash
+   oras pull ghcr.io/oso-gato/strix-ms-s1-bootc:installer   # → strix-wipe.iso + strix-preserve.iso, whole
+   ```
+   (needs the `oras` CLI; the ghcr package must be public — see maintainer step A.)
+2. **From a GitHub Release** — assets are **split** at GitHub's 2 GiB cap:
+   download the two `strix-wipe.iso.part*` + `SHA256SUMS`, then
+   `cat strix-wipe.iso.part* > strix-wipe.iso` and verify against `SHA256SUMS`.
+3. **Build it locally** — `./build-iso.sh` (rootful podman) pulls `:stable`
+   from ghcr and writes whole ISOs; `--local` builds the image from the tree first.
 
 ## Quick start
 
-1. **Build** (or grab a Release): `./build-iso.sh` (rootful podman; `--local`
-   to build the image from the working tree). Release assets come **split**
-   (GitHub's 2 GiB cap): `cat strix-wipe.iso.part* > strix-wipe.iso`, then
-   verify against `SHA256SUMS`.
+1. **Get `strix-wipe.iso`** by any method above.
 2. **Flash**: `sudo dd if=strix-wipe.iso of=/dev/rdiskN bs=4m status=progress`.
 3. **Boot it** — fully unattended install, auto-reboot, up on Ethernet with
    key-only SSH (keys = whatever `github.com/oso-gato.keys` published at build).
@@ -56,7 +71,8 @@ updates from `ghcr.io/oso-gato/strix-ms-s1-bootc:stable` **unauthenticated**,
 so the package must be public or `bootc` upgrades silently no-op. One click:
 *github.com/users/oso-gato → Packages → `strix-ms-s1-bootc` → Package settings
 → Change visibility → Public.* (The repo being public does not make the
-package public — they are separate.)
+package public — they are separate.) This one toggle also serves the ISO OCI
+artifact (`:installer`), which lives in the same package.
 
 **B. ak-private — the only secrets.** Fill
 `oso-gato/ak-private:strix/firstboot.yaml` (template already committed there):

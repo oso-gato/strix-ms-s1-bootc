@@ -96,6 +96,39 @@ jobs:
           set -euo pipefail
           ./build-iso.sh
 
+      # Publish the WHOLE ISOs to ghcr as an OCI artifact (via oras) — a
+      # single-file, 2-GiB-cap-free download alongside the container image.
+      # MUST run before the split step (which deletes the whole ISOs).
+      # oras is CI tooling on the runner (not layered into the target image),
+      # pinned by version + verified against its own published checksum.
+      - name: Install oras (pinned + checksum-verified)
+        run: |
+          set -euo pipefail
+          ORAS_VERSION=1.3.3
+          ORAS_SHA=9ce999f8d2de03fc03968b29d743077a58783e545e5eaa53917ca177352d0e59
+          curl -fsSLo oras.tar.gz \
+            "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          echo "${ORAS_SHA}  oras.tar.gz" | sha256sum -c -
+          tar -xzf oras.tar.gz oras
+          sudo install -m0755 oras /usr/local/bin/oras
+          rm -f oras oras.tar.gz
+          oras version
+
+      - name: Publish ISOs to ghcr as an OCI artifact
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io \
+            --username "${{ github.actor }}" --password-stdin
+          # One artifact carrying BOTH whole ISOs as layers. Pull with:
+          #   oras pull ghcr.io/oso-gato/strix-ms-s1-bootc:installer
+          oras push \
+            --artifact-type application/vnd.strix.installer \
+            "$IMAGE:installer-${{ steps.ver.outputs.version }}" \
+            strix-wipe.iso:application/vnd.strix.iso \
+            strix-preserve.iso:application/vnd.strix.iso
+          # Floating tag → newest installer (mirrors :stable for the image).
+          oras tag "$IMAGE:installer-${{ steps.ver.outputs.version }}" installer
+
       # GitHub Release assets cap at 2 GiB; a bootc anaconda ISO embeds the
       # whole image and exceeds it. Ship split parts + checksums; reassemble
       # with `cat` (see release body / README).
