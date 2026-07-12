@@ -183,6 +183,15 @@ scp -P "$SSH_PORT" -i "$WORK/valkey" -o StrictHostKeyChecking=no -o UserKnownHos
 KEYBODY=$(awk '{print $2}' "$WORK/valkey.pub")
 vssh "sudo bash /tmp/assert-in-vm.sh '$KEYBODY'" || fail "phase 2: in-VM assertion battery failed (see output above)"
 vssh 'touch ~/VALIDATION-MARKER && sync'
+
+# ─── 2b. claudebox integration — the "container half" (R8), never run before ──
+say "phase 2b: build + run the claudebox (Claude Code workbench), assert host immutability"
+scp -P "$SSH_PORT" -i "$WORK/valkey" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR "$HERE/validation/assert-claudebox.sh" core@127.0.0.1:/tmp/assert-claudebox.sh
+# Runs as core (rootless), NOT sudo. Network-dependent (pulls toolbox + claude-code).
+vssh 'bash /tmp/assert-claudebox.sh' || fail "phase 2b: claudebox integration failed (see output above)"
+pass "phase 2b: claudebox builds, Claude Code runs in it, host stayed immutable"
+
 vssh 'sudo poweroff' 2>/dev/null || true
 while kill -0 "$QEMU_PID" 2>/dev/null; do sleep 5; done
 pass "phase 2: assertion battery green; persistence marker written"
