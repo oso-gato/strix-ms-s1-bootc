@@ -38,6 +38,13 @@ jobs:
           printf '[storage]\ndriver = "overlay"\nrunroot = "/run/containers/storage"\ngraphroot = "/var/lib/containers/storage"\n' \
             | sudo tee /etc/containers/storage.conf >/dev/null
 
+      # Fast pure-logic unit tests (seconds, no VM) — fail before the heavy
+      # VM build if any shipped function's logic regressed.
+      - name: Unit tests (extract + exercise real script functions)
+        run: |
+          set -euo pipefail
+          bash validation/unit-tests.sh
+
       - name: Install QEMU/KVM tooling
         run: |
           set -euo pipefail
