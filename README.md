@@ -45,9 +45,59 @@ strix succeeds [`noir-strix-halo-fcos`](https://github.com/oso-gato/noir-strix-h
    Everything persists to the data drive; setup ends by removing the
    bootstrap `NOPASSWD` (the **sudo flip**).
 
-> **Tailnet prep for zero-touch**: put the `autoApprovers` ACL for
-> `10.0.50.0/24` in place **before** first boot and use a pre-approved auth
-> key in `firstboot.yaml` — route approval is not retroactive.
+## One-time maintainer setup (human, not automated)
+
+These are the only steps a person performs by hand. They are **account/tailnet
+level**, done once, and deliberately live outside the image: the box ships no
+credentials and hand-edits no config. Nothing here is a file on the host.
+
+**A. GitHub — make auto-updates possible.** The installed box pulls image
+updates from `ghcr.io/oso-gato/strix-ms-s1-bootc:stable` **unauthenticated**,
+so the package must be public or `bootc` upgrades silently no-op. One click:
+*github.com/users/oso-gato → Packages → `strix-ms-s1-bootc` → Package settings
+→ Change visibility → Public.* (The repo being public does not make the
+package public — they are separate.)
+
+**B. ak-private — the only secrets.** Fill
+`oso-gato/ak-private:strix/firstboot.yaml` (template already committed there):
+`core_password_hash` (yescrypt — `mkpasswd -m yescrypt`), Wi-Fi SSIDs/PSKs, and
+an optional **pre-approved, tagged** Tailscale auth key. This is the *only*
+place any secret lives; `strix-setup` pulls it on first boot after one
+device-flow approval.
+
+**C. Tailscale admin console (web) — `login.tailscale.com/admin`.** Not host
+config; the same web console you already use.
+- **DNS → MagicDNS**: enable (almost certainly already on). Gives the box the
+  name `strix.<tailnet>.ts.net` and makes `ssh core@strix` resolve over the
+  tailnet. *Required for name-based access.*
+- **DNS → HTTPS Certificates**: enable. Lets `tailscale serve` obtain a real
+  TLS cert for the `https://strix.<tailnet>.ts.net` Cockpit door (amendment
+  A4). **Optional** — skip it and Cockpit is still reachable at
+  `https://strix:9090` on the LAN; A4 simply retries until it's on.
+- **Access controls (the tailnet policy file — control-plane, not on the box)**:
+  add the two entries below. Both are **optional with working fallbacks**, so
+  you can skip the ACL entirely if you prefer. Put `autoApprovers` in place
+  **before** first boot — route approval is not retroactive.
+
+  ```jsonc
+  // Auto-approve the advertised subnet route (else you click "approve" once).
+  // Assumes the auth key in firstboot.yaml is tagged tag:router; otherwise use
+  // your user email or an autogroup in place of ["tag:router"].
+  "autoApprovers": { "routes": { "10.0.50.0/24": ["tag:router"] } },
+
+  // Keyless Tailscale SSH into core (amendment A13). Skip this and
+  // `ssh core@strix` over the tailnet still works via your GitHub key + OpenSSH.
+  "ssh": [
+    { "action": "accept", "src": ["autogroup:member"],
+      "dst": ["tag:router"], "users": ["core"] }
+  ]
+  ```
+
+**D. Live-host validation (once, on the real MS-S1 MAX).** VM validation covers
+everything except three hardware invariants — after first boot, confirm
+`journalctl -t strix-verify` is clean (or shows only what you expect): the
+`bond0` LACP link over both 10 GbE NICs, the MT7925 Wi-Fi (`wlp99s0`), and NVMe
+SMART (`smartctl`). These can only be checked on the hardware.
 
 ## Daily driving
 
