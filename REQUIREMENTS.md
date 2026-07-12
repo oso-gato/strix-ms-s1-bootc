@@ -32,6 +32,10 @@ by hand on the running machine:
 - **Update** = automatic. CI rebuilds the image fortnightly on the current Fedora
   base; the machine applies it on a timer. Local settings survive every update.
 - **Recovery** = every update keeps the previous image on disk; one command rolls back.
+- **Immutable beyond the image** — bootc on **bare metal**: the OS owns the hardware
+  directly, and the host is never mutated at runtime (no package layering, no
+  overlays, no on-box installs). Anything the machine needs after the image is built
+  runs in a container or a VM.
 
 The image starts from Fedora's minimal bootc base and adds only what the machine's
 jobs require. Everything below is baked into the image — the first boot is fully
@@ -52,18 +56,28 @@ functional, no post-install setup of software.
    bond, so wireless experiments never disturb it.
 
 3. **Container host.** Runs services in Podman containers, with their storage on the
-   data drive.
+   data drive — **with direct access to the hardware, including the GPU** (AI/ML
+   compute, media transcoding, accelerated desktops).
 
 4. **Virtual-machine host.** Runs full virtual machines via KVM/libvirt, using the
    hardware's 16 cores and 128 GB of memory. Everything that defines a VM — disk
    images, machine definitions, firmware state — lives on the data drive, so VMs
-   survive a complete reinstall of the operating system.
+   survive a complete reinstall of the operating system — **and VMs get shared
+   (paravirtualized) GPU acceleration; the single GPU is never exclusively assigned
+   away from the host.**
 
-5. **Web administration.** A browser console (Cockpit, port 9090) covers the whole
+5. **AI infrastructure.** The APU's GPU and the 128 GB unified memory are the
+   machine's AI substrate: the GPU is **shared concurrently** — partially to
+   containers, partially to VMs, never monopolized by either — and the unified
+   memory is **dynamically allocated on demand** (usage bounded by ceilings, never
+   carved into static reservations), so AI workloads, VMs, and the system flex
+   against one pool.
+
+6. **Web administration.** A browser console (Cockpit, port 9090) covers the whole
    machine: system health, journal, network, containers, **virtual machines**,
    **SELinux**, file management, and OS updates/rollback.
 
-6. **Shell access from anything.** SSH plus mosh (a roaming-friendly remote shell
+7. **Shell access from anything.** SSH plus mosh (a roaming-friendly remote shell
    that survives sleep, IP changes, and flaky links). Authentication is by SSH key
    only — the keys are whatever the GitHub account `oso-gato` currently publishes,
    fetched when the installer is built and re-synced periodically while running, so
@@ -73,7 +87,7 @@ functional, no post-install setup of software.
    windows, and each device renders at its own screen size without garbling the
    others.
 
-7. **AI maintenance workbench.** Claude Code runs on the box for host maintenance —
+8. **AI maintenance workbench.** Claude Code runs on the box for host maintenance —
    but never *on* the host. It lives in a disposable container (distrobox) rebuilt
    **daily** from Anthropic's official package repository at the latest release, so
    the tooling is always current while the host image stays untouched. A rebuild
@@ -133,13 +147,20 @@ the data drive; a future preserve-mode reinstall restores them automatically.
 
 # Functional requirements
 
-## R1 — Base & build discipline
-`quay.io/fedora/fedora-bootc:44` (or digest-pinned per the MT7925 watch-item),
-**additive only**; the Containerfile is the single source of truth. Package tiers:
+## R1 — Base & mutation discipline
+**Bare-metal bootc** image on `quay.io/fedora/fedora-bootc:44` — the OS owns the
+hardware directly, and because the OS *is* the image, the Containerfile is the
+**sole mutation channel** (edit → CI → registry → `bootc upgrade`; previous image
+kept for rollback). The host is **immutable at runtime**: no package layering, no
+overlays, no on-box installs — post-image capability runs in containers or VMs.
+At image build: weak dependencies off; the package list is the complete sanctioned
+footprint, every entry justified; **leaf packages, never convenience metapackages**
+(recorded exception otherwise); minimum is **capability-relative** — the smallest
+footprint that delivers the decided capability, closures disclosed. Provenance:
 ① Fedora official repos → ② the vendor's own official RPM repo (`.repo` verbatim,
-`gpgcheck=1` — Tailscale, Anthropic) → ③ nothing else. Never `curl|sh`, no COPR, no
-language-package-manager installs on the host. No credentials in the repo or any
-built artifact. SELinux enforcing. Secure Boot compatible (in-tree drivers only).
+`gpgcheck=1`) → ③ nothing else; never `curl|sh`, no COPR. No credentials in the
+repo or any built artifact. SELinux enforcing. Secure Boot compatible (in-tree
+drivers only).
 
 ## R2 — Wired/wireless networking
 bond0 **802.3ad LACP** over both 10 GbE NICs (`enp97s0`+`enp98s0`), route metric 100.
@@ -196,8 +217,8 @@ virt-install. **All libvirt image/config/state is persistent on the data drive**
 `/var/lib/libvirt` (disk images, nvram, snapshots, leases) mounts the `strix-vm`
 partition; `/etc/libvirt` (domain/network/pool XML, daemon confs) bind-mounts from
 that partition, ordered before the libvirt daemons; `/var/log/libvirt` rides
-`/var/log`. A preserve reinstall boots with every VM defined and startable. No
-VFIO/GPU passthrough in v1.0 (future).
+`/var/log`. A preserve reinstall boots with every VM defined and startable. GPU
+for VMs per **R15** (shared paravirtualized acceleration; VFIO excluded).
 
 ## R8 — Claudebox (AI maintenance workbench)
 distrobox on podman; box defined declaratively (rebuild = destroy + recreate from
@@ -286,6 +307,15 @@ README (this objective, quick start, access runbook), HARDWARE and BUILD-SPEC
 equivalents, migration note (one-time wipe). On ship: a reference-only banner PR to
 `noir-strix-halo-fcos`, which then freezes as the FCOS predecessor.
 
+## R15 — Shared GPU & AI infrastructure
+The single iGPU is **shared, never exclusively assigned**: host containers get
+direct GPU access (compute, media, display); VMs get paravirtualized GPU
+acceleration; both concurrently. **VFIO passthrough is excluded** — it would
+monopolize the sole iGPU away from the host and every GPU container. The 128 GB
+unified memory is **dynamically shared**: GPU use is bounded by a tunable
+ceiling, never a static reservation. *(Phase 1 = GPU sharing; Phase 2 = the
+unified-memory ceiling provision.)*
+
 ---
 
 # Decisions log (operator sign-offs)
@@ -334,6 +364,7 @@ equivalents, migration note (one-time wipe). On ship: a reference-only banner PR
 | A10 | 2026-07-11 | Repo goes **PUBLIC**: git history rewritten to the `oso-gato` identity (personal name/hostnames removed from author fields; file contents verified clean); drive serials/subnet stay per the noir-established posture (hardware fingerprint, not credentials). ghcr package public so the box can pull auto-updates unauthenticated (R11). |
 | A11 | 2026-07-12 | Delta adversarial review (post-P4 code: fix implementations + A1–A7) — 12 confirmed findings applied, 0 refuted. Headline: strix-firstboot-setup now runs **Before=tailscaled.service** (the daemon bootstraps an empty state file at startup, which would have defeated the restore gate and let the snapshot refresh destroy the preserved tailnet identity); parse-failure fallback in pull mode; lock-classifier and identity-bearing-state guards; atomic cockpit.conf writes + localhost origins + mDNS responder on bond0 (`strix.local` now actually resolves); tty1 getty ordering + console restore; claude session lock held wrapper-wide with the rebuild taking it exclusive; per-variant ISO reassembly instructions. |
 | A12 | 2026-07-12 | **R9 layout amended** (pre-flash, so still a single wipe migration): containers 750→**825 GiB**, vm 750→**825 GiB**, log = remainder ≈ **75 GiB** (was ~225; steady-state need is ~4–8 GiB — journald self-caps, pcp culls at ~2 weeks). Home unchanged at 2000 GiB. UUIDs/labels/mounts unchanged. |
+| A17 | 2026-07-12 | **Shared GPU & AI infrastructure (R15, new) + R1 refined to the bootc mutation model + objective augmented** (operator-approved). Objective gains: "Immutable beyond the image" (bare-metal bootc; no runtime layering/overlays/installs; post-image capability = containers/VMs), GPU clauses on items 3/4, and new item 5 "AI infrastructure" (GPU shared concurrently to containers + VMs; unified memory dynamically allocated — ceilings, not reservations). R1 rewritten: Containerfile = sole mutation channel; leaf-not-metapackage; capability-relative minimum (imported from the fleet's Build Principle 4/3, adapted — dnf exists only at image build). R15 Phase 1 built: VM GPU accel host stack (qemu virtio-gpu-gl leaf module, virglrenderer w/ Venus — verified `VK_MESA_venus_protocol` in the F44 `.so` — mesa RADV/GL; all L1-verified, none pulled by qemu-kvm-core; `libva-utils` and the VGA variant dropped per the minimalism principle) + `strix-gpu-selinux` firstboot oneshot (`container_use_devices`) + verify teeth (GPU stack, boolean, and the R1 zero-layered-packages assertion). VFIO documented-excluded. Phase 2 (unified-memory ceiling) follows separately. |
 | A16 | 2026-07-12 | **smartmontools/smartd REMOVED** (A6 correction, operator minimalism audit): the drive-health *visibility* A6 was added for is delivered by **`cockpit-storaged` via udisks2 2.11 + libblockdev-nvme** (verified: cockpit-storaged requires only `udisks2 >= 2.9`, installs with `smartmontools not installed`, and udisks2 2.11 ships native NVMe SMART) — plus `nvme smart-log` from the base `nvme-cli` for the CLI. smartd's only extra was periodic journal-logging whose alerts dead-ended (no MTA; `wall` reaches only active sessions). Redundant → dropped from the Containerfile package list, the service enablement, and the R13 verify assertion. `cockpit-storaged` stays as the health surface. *(A candidate future amendment, if wanted: a real push-alarm via smartd `-M exec` → ntfy/Tailscale — not built, no requirement.)* |
 | A15 | 2026-07-12 | **PROPOSED then WITHDRAWN** (minimalism audit): a `udevadm settle` in the kickstart `%pre` before the drive-identity guard. Not required per R10 (R10 is the guard itself); every prior validation run (v0.1.0→v0.10.0) resolved `/dev/disk/by-id` in Anaconda `%pre` with no settle, and a race would fail *safe* (abort before any write → re-run). Reverted. *(The hardware-invariant cross-check of strix's bond0/Wi-Fi/drive config vs noir's L3-proven settings found ZERO gaps — byte-exact match — so no other fix was warranted.)* |
 | A14 | 2026-07-12 | **R13 verify tightened from presence to function** (ultra-verify finding, `strix-verify-tailscale` helper): the post-install verify unit checked only that the tailscale binary exists + forwarding sysctls are set, so a box that booted with tailscaled logged-out would still pass "all invariants verified" — contradicting the unit's own "verify a running system, not documentation" mandate. Now, **once `strix-setup` has onboarded tailscale** (`.setup-done` gate), it also asserts `BackendState=Running` + `10.0.50.0/24` advertised + `--ssh` on (A13). No-ops pre-onboarding; route *approval* stays operator/console-side. Unit-tested (6 cases); VM-inert (no `.setup-done` in the harness). |

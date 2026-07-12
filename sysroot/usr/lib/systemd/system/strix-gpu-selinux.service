@@ -1,0 +1,26 @@
+# R15/A17 — let podman containers access the host GPU devices under SELinux
+# enforcing. A container passing `--device /dev/dri/...` or `/dev/kfd` (the
+# Plex-VA-API / ROCm-AI / desktop-accel paths) is blocked by an AVC denial
+# unless the `container_use_devices` boolean is on — even with correct
+# render-group membership. The boolean must be set on the RUNNING kernel
+# (SELinux policy isn't loaded in the OCI build sandbox; the persistent
+# boolean store is machine-local), so this is a firstboot oneshot — the same
+# runtime-SELinux pattern as strix-libvirt-relabel. Idempotent + guarded
+# (setsebool -P rebuilds policy, so only write when currently off).
+#
+# Scope note (BUILD-SPEC): this broadens device access for ALL containers on
+# the box — accepted: strix is a single-operator host whose GPU is *meant*
+# to be container-shared (R15), and the access boundary is the network (R6).
+# The VM/qemu path does NOT need this (libvirt grants the render node to the
+# qemu process via its own device ACL + svirt policy).
+[Unit]
+Description=strix: enable container_use_devices for shared-GPU containers (R15)
+ConditionSecurity=selinux
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'getsebool container_use_devices 2>/dev/null | grep -q " on$" || { setsebool -P container_use_devices on && logger -t strix-gpu-selinux -p notice "container_use_devices enabled (R15 shared GPU)"; }'
+
+[Install]
+WantedBy=multi-user.target

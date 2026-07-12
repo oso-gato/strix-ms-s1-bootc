@@ -93,8 +93,13 @@ vm() {
     -device "nvme,drive=d1,serial=$DATA_SERIAL,bootindex=3"
     -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22"
     -device "virtio-net-pci,netdev=n0"
+    -device "virtio-gpu-pci"
     -display none -serial "file:$WORK/serial-${VM_SEQ}-$mode.log"
   )
+  # virtio-gpu-pci gives the guest real /dev/dri nodes (card0 + renderD128),
+  # so the R15 container-GPU path — device access under the SELinux boolean —
+  # is EMPIRICALLY exercised in CI. (Venus/RADV rendering itself needs the
+  # physical amdgpu — live-host checklist.)
   if [ -n "$iso" ]; then
     args+=( -drive "file=$iso,if=none,id=cd0,format=raw,media=cdrom,readonly=on"
             -device "ide-cd,drive=cd0,bootindex=1" -no-reboot )

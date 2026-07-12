@@ -67,6 +67,23 @@ chk "core linger enabled"                test -e /var/lib/systemd/linger/core
 chk "tmux attach drop-in present"        test -f /etc/profile.d/zz-tmux-attach.sh
 chk "fastfetch drop-in present (A1)"     test -f /etc/profile.d/zz-fastfetch.sh
 
+echo "── R15: shared GPU (VM-accel stack, container device path, R1 immutability) ──"
+chk "virtio-gpu-gl qemu module baked"     test -f /usr/lib64/qemu/hw-display-virtio-gpu-gl.so
+chk "virglrenderer (Venus) baked"         sh -c 'ls /usr/lib64/libvirglrenderer.so.1* >/dev/null'
+chk "RADV (amdgpu Vulkan) baked"          test -f /usr/lib64/libvulkan_radeon.so
+chk "RADV ICD manifest present"           test -f /usr/share/vulkan/icd.d/radeon_icd.x86_64.json
+chk "strix-gpu-selinux ran"               systemctl is-active --quiet strix-gpu-selinux.service
+chk "container_use_devices = on"          sh -c 'getsebool container_use_devices | grep -q " on$"'
+chk "/dev/dri render node exists (virtio-gpu)" sh -c 'ls /dev/dri/renderD* >/dev/null'
+chk "render node group = render"          sh -c 'stat -c %G /dev/dri/renderD* | grep -q render'
+# THE empirical container-GPU test: a rootless (core) container passes
+# --device /dev/dri and reads the node under SELinux enforcing + the boolean.
+chk "rootless container opens /dev/dri (R15 container half)" \
+  timeout 300 runuser -u core -- env XDG_RUNTIME_DIR=/run/user/1000 \
+    podman run --rm --device /dev/dri registry.fedoraproject.org/fedora-minimal:44 \
+    sh -c 'ls /dev/dri/renderD*'
+chk "R1: zero layered packages (immutable host)" sh -c '! rpm-ostree status --booted | grep -q LayeredPackages:'
+
 echo "── R11/R13: updates + daemons ──"
 chk "bootc tracks ghcr ref"              sh -c 'bootc status 2>/dev/null | grep -q "ghcr.io/oso-gato/strix-ms-s1-bootc"'
 chk "bootc auto-update timer active"     systemctl is-active --quiet bootc-fetch-apply-updates.timer

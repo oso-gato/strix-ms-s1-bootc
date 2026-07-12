@@ -129,6 +129,15 @@ python3 -c "import json;d=json.load(open('$M'));import sys;sys.exit(0 if d['perm
 python3 -c "import json;d=json.load(open('$M'));import sys;sys.exit(0 if d.get('effortLevel')=='xhigh' else 1)"                 && ok "managed: effortLevel=xhigh (ultracode floor)" || bad "effortLevel" "not xhigh"
 python3 -c "import json;d=json.load(open('$M'));import sys;sys.exit(1 if ('model' in d or 'model' in d.get('permissions',{})) else 0)" && ok "managed: NO model override (—model default wins)" || bad "model override present" "would outrank --model default"
 
+echo "═══ R15 shared GPU: build wiring present ═══"
+CF="$HERE/Containerfile"
+grep -q 'qemu-device-display-virtio-gpu-gl' "$CF"  && ok "Containerfile installs virtio-gpu-gl (leaf)" || bad "virtio-gpu-gl missing" ""
+grep -q 'mesa-vulkan-drivers' "$CF"                && ok "Containerfile installs RADV (mesa-vulkan-drivers)" || bad "mesa-vulkan-drivers missing" ""
+grep -q 'strix-gpu-selinux.service' "$CF"          && ok "strix-gpu-selinux enabled in image" || bad "gpu-selinux not enabled" ""
+grep -q 'container_use_devices' "$HERE/sysroot/usr/lib/systemd/system/strix-gpu-selinux.service" && ok "gpu-selinux sets container_use_devices" || bad "boolean not set by unit" ""
+grep -q 'LayeredPackages' "$HERE/sysroot/usr/lib/systemd/system/strix-postinstall-verify.service" && ok "verify asserts R1 zero-layering" || bad "R1 layering assertion missing" ""
+grep -q 'libva-utils' "$CF" && bad "libva-utils crept in (R1 minimalism)" "present" || ok "no libva-utils (R1 minimalism holds)"
+
 rm -rf "$tmp"
 echo
 echo "═══ UNIT TESTS: $PASS passed, $FAIL failed ═══"

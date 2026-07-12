@@ -12,6 +12,19 @@ ultra-verify fan-out refuted every FCOS→bootc mechanism concern (interface
 names come from systemd/udev not the kernel; the 6.19→7.1.3 change touched only
 Bluetooth, not the mt7925e Wi-Fi driver; drives mount by UUID).
 
+**Shared GPU & AI infrastructure (A17 — R15 new, R1 refined, objective augmented):**
+the single iGPU is shared, never VFIO-assigned: containers get direct GPU access
+(`/dev/dri` + `/dev/kfd`; `container_use_devices` enabled at first boot), VMs get
+paravirtualized virtio-gpu/Venus acceleration (host stack baked: virtio-gpu-gl
+leaf module, virglrenderer with Venus verified in the F44 `.so`, mesa RADV/GL —
+none pulled by qemu-kvm-core). R1 rewritten to the bootc mutation model: the
+Containerfile is the sole mutation channel; runtime layering/overlays forbidden
+(verify unit now asserts zero layered packages); leaf-not-metapackage +
+capability-relative minimum imported from the fleet principle. CI empirically
+exercises the container-GPU path (virtio-gpu node in the harness VM + a rootless
+container opening `/dev/dri` under SELinux); Venus-on-amdgpu, ROCm, and VA-API
+remain live-host checks. Phase 2 (dynamic unified-memory ceiling) follows.
+
 **Pre-ship minimalism corrections:**
 - **A16**: removed smartmontools/smartd — redundant. `cockpit-storaged` (via
   udisks2 2.11 + libblockdev-nvme) already surfaces NVMe SMART/health with no

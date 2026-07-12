@@ -69,6 +69,22 @@ COPY sysroot/ /
 #                      rsync (data-drive plumbing), bash-completion,
 #                      policycoreutils-python-utils (semanage — applying
 #                      SELinux fixes that cockpit-selinux only reports)
+#   GPU / VM accel (R15/A17 — VM half of the shared single iGPU; leaf
+#   packages, L1-verified against the F44 RPMs, none pulled by qemu-kvm-core):
+#     qemu-device-display-virtio-gpu-gl : the virtio-gpu-gl device module
+#       (ships hw-display-virtio-gpu-gl.so; venus=/blob=/hostmem= props)
+#     virglrenderer  : hard-pulled by the module; listed for self-doc.
+#       Venus/Vulkan compiled in (VK_MESA_venus_protocol verified in the .so)
+#     mesa-vulkan-drivers : RADV — the amdgpu Vulkan driver Venus renders on
+#     vulkan-loader  : hard-pulled by mesa-vulkan-drivers; listed because
+#       virglrenderer only dlopens libvulkan (no hard Require of its own)
+#     mesa-dri-drivers + mesa-libEGL : the GL/virgl half of VM graphics —
+#       disclosed capability closure (guest desktops render GL, not Vulkan).
+#   Whole path is headless-capable (render node, no compositor). The
+#   CONTAINER half of R15 needs NO packages: /dev/dri + /dev/kfd + render
+#   group come from base amdgpu/udev; SELinux enabler = strix-gpu-selinux.
+#   Dropped per R1 minimalism: libva-utils (diagnostic; containers carry
+#   their own libva), qemu-device-display-virtio-vga-gl (redundant variant).
 RUN dnf -y --setopt=install_weak_deps=False install \
         mt7xxx-firmware wireless-regdb NetworkManager-wifi wpa_supplicant \
         tailscale \
@@ -83,6 +99,8 @@ RUN dnf -y --setopt=install_weak_deps=False install \
         python3 python3-pyyaml ethtool \
         tcpdump mtr pcp rsync bash-completion \
         policycoreutils-python-utils \
+        qemu-device-display-virtio-gpu-gl virglrenderer \
+        mesa-vulkan-drivers vulkan-loader mesa-dri-drivers mesa-libEGL \
     && dnf clean all \
     && rm -rf /var/log/* /var/cache/* /var/lib/dnf
 
@@ -125,7 +143,7 @@ RUN systemctl enable \
         strix-libvirt-relabel.service \
         strix-firstboot-setup.service strix-setup-tty1.service \
         strix-postinstall-verify.service tailscale-udp-gro.service \
-        cockpit-tailnet-serve.service \
+        cockpit-tailnet-serve.service strix-gpu-selinux.service \
         strix-table100.timer strix-keys-sync.timer \
         pmcd.service pmlogger.service pmproxy.service \
     && systemctl --global enable claudebox-rebuild-daily.timer podman.socket

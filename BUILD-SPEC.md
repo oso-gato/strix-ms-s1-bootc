@@ -62,6 +62,46 @@ tailscale_authkey: "tskey-auth-..."   # optional; pre-approved + tagged;
                                       # must predate first advertisement
 ```
 
+## 3b. Shared GPU (R15) — how to use it
+
+The single Radeon 8060S is shared (never VFIO-passed-through — that would remove
+it from the host and every GPU container). Three consumers, concurrently:
+
+**Containers (direct device access; `container_use_devices` is enabled at first
+boot by `strix-gpu-selinux`):**
+```bash
+# media transcode (VA-API — e.g. Plex/Jellyfin; the container brings its own libva)
+podman run -d --device /dev/dri ... 
+# AI / ROCm (llama.cpp, vLLM — ROCm userspace lives in the container;
+# HSA_OVERRIDE_GFX_VERSION, if needed for gfx1151, is container-side)
+podman run -d --device /dev/kfd --device /dev/dri ...
+```
+
+**VMs (paravirtualized virtio-gpu; GL via virgl, Vulkan via Venus):** add to the
+domain XML (`virsh edit`, or Cockpit → edit; requires shared memfd memory):
+```xml
+<domain ... xmlns:qemu="http://libvirt.org/schemas/domain/qemu/1.0">
+  <memoryBacking><source type="memfd"/><access mode="shared"/></memoryBacking>
+  <devices>
+    <video><model type="virtio" heads="1" primary="yes">
+      <acceleration accel3d="yes" rendernode="/dev/dri/renderD128"/>
+    </model></video>
+  </devices>
+  <qemu:commandline>  <!-- Venus (Vulkan) — device props, not libvirt attrs -->
+    <qemu:arg value="-set"/><qemu:arg value="device.video0.blob=on"/>
+    <qemu:arg value="-set"/><qemu:arg value="device.video0.venus=on"/>
+    <qemu:arg value="-set"/><qemu:arg value="device.video0.hostmem=8G"/>
+  </qemu:commandline>
+</domain>
+```
+The guest needs Mesa's virtio-gpu/Venus drivers (any current Linux guest);
+libvirt grants the qemu process the render node itself (device ACL + svirt).
+Headless-safe: Venus renders via RADV directly on the render node, no compositor.
+
+**Live-host checks (GPU items — CI proves stack + container device access only):**
+`vulkaninfo --summary | grep -i radv` (RADV sees gfx1151) · a VA-API transcode in a
+container · ROCm device visible in an AI container · Venus accel in a test VM.
+
 ## 4. Operating notes
 
 - **Updates**: automatic (base-enabled `bootc-fetch-apply-updates.timer`,

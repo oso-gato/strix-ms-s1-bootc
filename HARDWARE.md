@@ -14,7 +14,7 @@
 | Component | Spec | Build implication |
 |---|---|---|
 | APU | **Ryzen AI Max+ 395** — 16C/32T Zen 5, 3.0/5.1 GHz | KVM host capacity (R7) |
-| iGPU | Radeon 8060S — 40 RDNA 3.5 CUs | no passthrough in v1.0 |
+| iGPU | Radeon 8060S — 40 RDNA 3.5 CUs (gfx1151) | **shared per R15** — containers direct (`/dev/dri` + `/dev/kfd`), VMs paravirt (virtio-gpu/Venus); VFIO excluded (single iGPU — passthrough would remove it from the host and every GPU container) |
 | NPU | XDNA 2 — 50 TOPS | needs BIOS IOMMU on (SVA) |
 | Memory | **128 GB LPDDR5X-8000**, soldered, 256-bit, ~215 GB/s measured, UMA | VM headroom |
 | Power | 130 W sustained / 160 W peak PPT; 320 W PSU | |

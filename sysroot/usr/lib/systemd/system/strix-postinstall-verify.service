@@ -15,7 +15,7 @@ After=var-home.mount var-lib-containers.mount var-lib-libvirt.mount var-log.moun
 # Ordering-only edges to the asserted daemons (no Wants/Requires): a failed
 # daemon job releases the edge immediately, so genuine breakage still fails
 # loudly — but a healthy Type=notify startup can't race the assertion.
-After=pmcd.service pmlogger.service pmproxy.service
+After=pmcd.service pmlogger.service pmproxy.service strix-gpu-selinux.service
 
 [Service]
 Type=oneshot
@@ -56,6 +56,12 @@ ExecStart=/bin/sh -c 'test -f /usr/share/strix/claudebox/distrobox.ini || { logg
 # R4d: runtime key-sync armed. R11: auto-update timer armed.
 ExecStart=/bin/sh -c 'systemctl is-active --quiet strix-keys-sync.timer || { logger -t strix-verify -p err "strix-keys-sync.timer not active"; exit 1; }'
 ExecStart=/bin/sh -c 'systemctl is-active --quiet bootc-fetch-apply-updates.timer || { logger -t strix-verify -p err "bootc auto-update timer not active"; exit 1; }'
+# R15: shared-GPU stack baked (VM half) + container half enabled.
+ExecStart=/bin/sh -c 'test -f /usr/lib64/qemu/hw-display-virtio-gpu-gl.so && test -f /usr/lib64/libvulkan_radeon.so || { logger -t strix-verify -p err "VM GPU-accel stack missing (virtio-gpu-gl / RADV)"; exit 1; }'
+ExecStart=/bin/sh -c 'getsebool container_use_devices 2>/dev/null | grep -q " on$" || { logger -t strix-verify -p err "container_use_devices off — containers cannot reach /dev/dri//dev/kfd (R15)"; exit 1; }'
+# R1: host immutable at runtime — the booted deployment carries ZERO layered
+# packages (rpm-ostree prints a LayeredPackages line only when layering exists).
+ExecStart=/bin/sh -c '! rpm-ostree status --booted | grep -q "LayeredPackages:" || { logger -t strix-verify -p err "runtime package layering detected — R1 forbids host mutation outside the image"; exit 1; }'
 # R5: sudo-flip state consistent — after setup, the bootstrap NOPASSWD file
 # must be gone (strix-firstboot-setup enforces; this asserts).
 ExecStart=/bin/sh -c 'if [ -f /var/home/.strix-secrets/.setup-done ] && [ -f /etc/sudoers.d/strix-bootstrap ]; then logger -t strix-verify -p err "sudo flip not enforced (bootstrap NOPASSWD still present after setup)"; exit 1; fi'
