@@ -1,0 +1,12 @@
+# Refresh cadence: GitHub installation tokens live ~1 h; re-mint at ~50 min
+# (plus shortly after boot) so the claudebox always sees a valid GH_TOKEN.
+[Unit]
+Description=strix: refresh the claudebox GitHub App token (~50 min; token lives ~1 h)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=50min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

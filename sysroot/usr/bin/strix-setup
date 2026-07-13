@@ -263,6 +263,40 @@ if [ -f /var/lib/tailscale/tailscaled.state ]; then
   install -m 0600 -o root -g root /var/lib/tailscale/tailscaled.state "$SECRETS/tailscaled.state"
 fi
 
+# ── (4b) GitHub App credentials (R8/A19) — optional, PULL mode only ───────────
+# The claudebox's GitHub authority. Persisted directly to the data drive (the
+# mint service reads them in-place, so no separate restore is needed); the
+# private-key PEM is multi-line, so it's written by python, not the KV parser.
+if [ "$PULLED" = 1 ] && [ -f "$workdir/firstboot.yaml" ]; then
+  if python3 - "$workdir/firstboot.yaml" "$SECRETS" <<'PY'
+import sys, os, yaml
+d = yaml.safe_load(open(sys.argv[1])) or {}
+ga = d.get("github_app") or {}
+appid  = str(ga.get("app_id", "") or "").strip()
+instid = str(ga.get("installation_id", "") or "").strip()
+key    = ga.get("private_key", "") or ""
+if appid and instid and key.strip():
+    gd = os.path.join(sys.argv[2], "github-app")
+    # strix-setup runs as root (it exits otherwise), so files land root-owned;
+    # only the 0700/0600 modes need asserting.
+    os.makedirs(gd, mode=0o700, exist_ok=True); os.chmod(gd, 0o700)
+    def w(name, val):
+        p = os.path.join(gd, name)
+        with open(p, "w") as f: f.write(val if val.endswith("\n") else val + "\n")
+        os.chmod(p, 0o600)
+    w("app-id", appid); w("installation-id", instid); w("private-key.pem", key.rstrip("\n"))
+    print("persisted")
+PY
+  then
+    if [ -d "$SECRETS/github-app" ]; then
+      echo "[ok] persisted GitHub App credentials (claudebox authority)."
+      # Mint the first token now so the box has GH_TOKEN immediately.
+      systemctl start strix-gh-app-token.service >/dev/null 2>&1 || \
+        echo "[warn] initial token mint deferred to the timer." >&2
+    fi
+  fi
+fi
+
 # ── (5) SUDO FLIP (R5): from here on, sudo requires the core password ────────
 rm -f /etc/sudoers.d/strix-bootstrap
 echo "[ok] sudo now requires the core password (bootstrap NOPASSWD removed)."

@@ -153,6 +153,67 @@ PY
 grep -q 'ttm.pages_limit=31457280' "$HERE/sysroot/usr/lib/systemd/system/strix-postinstall-verify.service" && ok "verify unit asserts the ceiling karg" || bad "verify missing ceiling assert" ""
 grep -vE '^\s*#' "$KT" | grep -qE 'amd_iommu|gttsize|page_pool' && bad "excluded karg crept in (A18 exclusions)" "present" || ok "exclusions hold (no amd_iommu=off / gttsize / page_pool_size)"
 
+echo "═══ R8/A19 claudebox GitHub-App authority ═══"
+gt="$tmp/ghapp"; mkdir -p "$gt"
+# (1) The mint script's RS256 JWT method is cryptographically sound: replicate
+# its exact b64url + openssl-sign pipeline and verify the signature validates.
+openssl genrsa -out "$gt/key.pem" 2048 2>/dev/null
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+h=$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | b64url)
+p=$(printf '%s' '{"iat":1,"exp":600,"iss":"123"}' | b64url)
+sig_raw="$tmp/sig.bin"; printf '%s' "$h.$p" | openssl dgst -sha256 -sign "$gt/key.pem" -binary > "$sig_raw"
+openssl rsa -in "$gt/key.pem" -pubout -out "$gt/pub.pem" 2>/dev/null
+printf '%s' "$h.$p" | openssl dgst -sha256 -verify "$gt/pub.pem" -signature "$sig_raw" >/dev/null 2>&1 \
+  && ok "JWT RS256 sign/verify round-trips (mint method sound)" || bad "JWT signature invalid" ""
+# extract the SAME b64url pipeline text from the shipped script (guard against drift)
+grep -q "tr '+/' '-_' | tr -d '='" "$HERE/sysroot/usr/bin/strix-gh-app-token" \
+  && ok "mint script uses base64url exactly" || bad "mint script b64url drifted" ""
+
+# (2) The strix-setup github_app persist logic writes the three files 0600 from
+# a filled block, and SKIPS an empty/placeholder block.
+cat > "$tmp/fb-full.yaml" <<YML
+github_app:
+  app_id: "1234567"
+  installation_id: "8899"
+  private_key: |
+    -----BEGIN RSA PRIVATE KEY-----
+    ABC
+    -----END RSA PRIVATE KEY-----
+YML
+cat > "$tmp/fb-empty.yaml" <<YML
+github_app:
+  app_id: ""
+  installation_id: ""
+  private_key: |
+    -----BEGIN RSA PRIVATE KEY-----
+    REPLACE_ME
+    -----END RSA PRIVATE KEY-----
+YML
+# reuse the exact python from strix-setup (extract the heredoc body)
+sed -n "/python3 - .\$workdir\/firstboot.yaml. .\$SECRETS. <<.PY./,/^PY$/p" "$HERE/sysroot/usr/bin/strix-setup" \
+  | sed '1d;$d' > "$tmp/persist.py"
+outdir="$tmp/sec-full"; mkdir -p "$outdir"
+python3 "$tmp/persist.py" "$tmp/fb-full.yaml" "$outdir" >/dev/null 2>&1 || true
+if [ -f "$outdir/github-app/app-id" ] && [ -f "$outdir/github-app/private-key.pem" ] \
+   && [ "$(cat "$outdir/github-app/app-id")" = "1234567" ] \
+   && [ "$(stat -c %a "$outdir/github-app/private-key.pem" 2>/dev/null || stat -f %Lp "$outdir/github-app/private-key.pem")" = "600" ]; then
+  ok "github_app persist: filled block → 3 files, key 0600"
+else bad "github_app persist (filled) wrong" ""; fi
+outdir2="$tmp/sec-empty"; mkdir -p "$outdir2"
+python3 "$tmp/persist.py" "$tmp/fb-empty.yaml" "$outdir2" >/dev/null 2>&1 || true
+[ ! -d "$outdir2/github-app" ] && ok "github_app persist: empty/placeholder block skipped" || bad "empty block not skipped" "dir created"
+
+# (3) The mint script no-ops (exit 0, no token) when the App isn't configured.
+mintcopy="$tmp/mint"; sed -e "s#^APP_DIR=.*#APP_DIR=$tmp/absent#" -e "s#^OUT_DIR=.*#OUT_DIR=$tmp/out#" \
+  "$HERE/sysroot/usr/bin/strix-gh-app-token" > "$mintcopy"; chmod +x "$mintcopy"
+bash "$mintcopy" >/dev/null 2>&1; rc=$?
+{ [ "$rc" = 0 ] && [ ! -f "$tmp/out/gh-token" ]; } && ok "mint no-ops cleanly when App unconfigured" || bad "mint not clean no-op" "rc=$rc"
+
+# (4) Build wiring
+grep -q 'strix-gh-app-token.timer' "$CF"  && ok "gh-app-token.timer enabled in image" || bad "timer not enabled" ""
+grep -q 'GH_TOKEN' "$HERE/sysroot/usr/share/strix/claudebox/claudebox-init.sh" && ok "claudebox-init bridges GH_TOKEN" || bad "GH_TOKEN bridge missing" ""
+grep -q 'strix-gh-app-token.timer' "$HERE/sysroot/usr/lib/systemd/system/strix-postinstall-verify.service" && ok "verify asserts token timer armed" || bad "verify missing timer assert" ""
+
 rm -rf "$tmp"
 echo
 echo "═══ UNIT TESTS: $PASS passed, $FAIL failed ═══"

@@ -57,6 +57,18 @@ chk "in-box managed: NO model override"     sh -c '! distrobox enter claudebox -
 chk "host wrapper passes --model default"   grep -q -- '--model default' /usr/bin/claude
 chk "host wrapper injects ultracode"        grep -q 'ultracode' /usr/bin/claude
 
+echo "── R8/A19: GitHub-App token bridge reaches INTO the box (empirical) ──"
+# Prove the host-minted token file is readable in-box as GH_TOKEN via the
+# distrobox host mount — put a sentinel on the host tmpfs, read it in-box.
+chk "gh-token profile.d present in box"     distrobox enter claudebox -- test -f /etc/profile.d/strix-gh-token.sh
+sudo install -d -m 0755 /run/strix
+printf 'SENTINEL_TOKEN_%s\n' "$$" | sudo tee /run/strix/gh-token >/dev/null
+sudo chown root:core /run/strix/gh-token 2>/dev/null || sudo chgrp core /run/strix/gh-token
+sudo chmod 0640 /run/strix/gh-token
+chk "in-box GH_TOKEN bridges from host tmpfs" \
+  sh -c 'distrobox enter claudebox -- sh -lc "echo \$GH_TOKEN" | grep -q "SENTINEL_TOKEN_"'
+sudo rm -f /run/strix/gh-token
+
 echo
 if [ "$FAILS" -gt 0 ]; then
   echo "ASSERT-CLAUDEBOX: $FAILS FAILURE(S)"

@@ -1,0 +1,11 @@
+# R8/A19 — mint the claudebox's short-lived GitHub App installation token.
+# No-ops when the App isn't configured; reads per-box App creds from the
+# preserved data drive, writes a ~1 h token to core-readable tmpfs.
+[Unit]
+Description=strix: mint short-lived GitHub App token for the claudebox (R8/A19)
+Wants=network-online.target
+After=network-online.target nss-lookup.target var-home.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/strix-gh-app-token

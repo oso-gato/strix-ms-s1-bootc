@@ -53,6 +53,10 @@ ExecStart=/bin/sh -c 'for s in virtqemud virtnetworkd virtstoraged virtnodedevd 
 # R4/R8: shell + workbench tooling baked.
 ExecStart=/bin/sh -c 'command -v mosh-server >/dev/null && command -v tmux >/dev/null && command -v fastfetch >/dev/null && command -v distrobox >/dev/null && command -v gh >/dev/null || { logger -t strix-verify -p err "shell/workbench tool missing (mosh/tmux/fastfetch/distrobox/gh)"; exit 1; }'
 ExecStart=/bin/sh -c 'test -f /usr/share/strix/claudebox/distrobox.ini || { logger -t strix-verify -p err "claudebox manifest missing"; exit 1; }'
+# R8/A19: claudebox GitHub-App token machinery armed; and when the App IS
+# configured (post-setup), the minted token must be present + fresh (<65 min).
+ExecStart=/bin/sh -c 'systemctl is-active --quiet strix-gh-app-token.timer || { logger -t strix-verify -p err "strix-gh-app-token.timer not active (R8/A19)"; exit 1; }'
+ExecStart=/bin/sh -c 'if [ -d /var/home/.strix-secrets/github-app ] && [ -f /var/home/.strix-secrets/.setup-done ]; then { [ -f /run/strix/gh-token ] && [ -n "$(find /run/strix/gh-token -mmin -65 2>/dev/null)" ]; } || { logger -t strix-verify -p err "GitHub App configured but token missing/stale (R8/A19)"; exit 1; }; fi'
 # R4d: runtime key-sync armed. R11: auto-update timer armed.
 ExecStart=/bin/sh -c 'systemctl is-active --quiet strix-keys-sync.timer || { logger -t strix-verify -p err "strix-keys-sync.timer not active"; exit 1; }'
 ExecStart=/bin/sh -c 'systemctl is-active --quiet bootc-fetch-apply-updates.timer || { logger -t strix-verify -p err "bootc auto-update timer not active"; exit 1; }'

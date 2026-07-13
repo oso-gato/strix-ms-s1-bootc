@@ -12,6 +12,19 @@ ultra-verify fan-out refuted every FCOS→bootc mechanism concern (interface
 names come from systemd/udev not the kernel; the 6.19→7.1.3 change touched only
 Bluetooth, not the mt7925e Wi-Fi driver; drives mount by UUID).
 
+**Claudebox GitHub authority (A19 — R8 extension, App-only):** the claudebox now
+operates GitHub under a **dedicated per-box GitHub App** (never a personal token,
+never shared). App credentials (id + installation id + private-key PEM) arrive via
+an optional `github_app:` block in `firstboot.yaml`, persist to the data drive, and
+a host timer mints a short-lived (~1 h) installation token every ~50 min into
+core-readable tmpfs (`/run/strix/gh-token`) that the box bridges in as `GH_TOKEN`.
+JWT signing uses the base `openssl` — zero new packages. Accepted boundary: an App
+on a personal account can't create repos (create-repo needs a user token) — out of
+scope by choice. CI proves the JWT method (sign/verify round-trip), the persist
+logic, the no-op-when-unconfigured path, and — empirically in the built box — that
+`GH_TOKEN` bridges from host tmpfs through the distrobox mount. ak-private's
+firstboot template gains the block.
+
 **Shared GPU & AI infrastructure (A17 — R15 new, R1 refined, objective augmented):**
 the single iGPU is shared, never VFIO-assigned: containers get direct GPU access
 (`/dev/dri` + `/dev/kfd`; `container_use_devices` enabled at first boot), VMs get

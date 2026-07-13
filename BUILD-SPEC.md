@@ -113,6 +113,31 @@ the ceiling karg only):**
 container · ROCm device visible in an AI container (~120 GiB reported) · Venus
 accel in a test VM.
 
+## 3c. Claudebox GitHub authority (R8/A19)
+
+The claudebox operates GitHub as a **dedicated per-box GitHub App** (not a personal
+token). One-time operator setup:
+
+1. **Create the App** (github.com → Settings → Developer settings → GitHub Apps →
+   New). Permissions: the minimum for the box's job — typically **Contents: R/W**
+   and **Pull requests: R/W** on the repos strix maintains. Note the **App ID**.
+2. **Generate a private key** (App page → "Generate a private key" → downloads a
+   `.pem`).
+3. **Install the App** on the chosen repos (App page → Install App). Open the
+   installation and read the **Installation ID** from its URL
+   (`.../installations/<INSTALLATION_ID>`).
+4. **Put all three into `firstboot.yaml`** (the `github_app:` block) before first
+   boot. strix persists them to the data drive; the host mints a fresh ~1 h token
+   every ~50 min into `/run/strix/gh-token`, which the box bridges as `GH_TOKEN`.
+
+**Capability boundary (accepted, A19):** a GitHub App on a *personal* account
+**cannot create new repositories** (create-repo needs a user token). Create the repo
+yourself, then install the App on it. Everything else — clone, branch, commit, push,
+open/track PRs on installed repos — runs as the App.
+
+**Live-host check:** in the box, `gh auth status` shows the App installation token;
+`gh api /installation/repositories` lists the repos it can reach.
+
 ## 4. Operating notes
 
 - **Updates**: automatic (base-enabled `bootc-fetch-apply-updates.timer`,

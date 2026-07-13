@@ -115,6 +115,7 @@ RUN chmod 0600 /etc/NetworkManager/system-connections/*.nmconnection \
                   /usr/bin/strix-verify-tailscale \
                   /usr/bin/claude \
                   /usr/bin/claudebox-rebuild /usr/bin/claudebox-daily \
+                  /usr/bin/strix-gh-app-token \
                   /usr/share/strix/claudebox/claudebox-init.sh
 
 # ─── Hostname ────────────────────────────────────────────────────────────────
@@ -144,7 +145,7 @@ RUN systemctl enable \
         strix-firstboot-setup.service strix-setup-tty1.service \
         strix-postinstall-verify.service tailscale-udp-gro.service \
         cockpit-tailnet-serve.service strix-gpu-selinux.service \
-        strix-table100.timer strix-keys-sync.timer \
+        strix-table100.timer strix-keys-sync.timer strix-gh-app-token.timer \
         pmcd.service pmlogger.service pmproxy.service \
     && systemctl --global enable claudebox-rebuild-daily.timer podman.socket
 # (--global podman.socket: every user gets a rootless podman API socket at
