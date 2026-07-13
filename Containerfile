@@ -115,7 +115,7 @@ RUN chmod 0600 /etc/NetworkManager/system-connections/*.nmconnection \
                   /usr/bin/strix-verify-tailscale \
                   /usr/bin/claude \
                   /usr/bin/claudebox-rebuild /usr/bin/claudebox-daily \
-                  /usr/bin/strix-gh-app-token \
+                  /usr/bin/strix-gh-app-token /usr/bin/strix-gh-renew \
                   /usr/share/strix/claudebox/claudebox-init.sh
 
 # ─── Hostname ────────────────────────────────────────────────────────────────

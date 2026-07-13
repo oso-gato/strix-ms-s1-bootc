@@ -25,6 +25,12 @@ logic, the no-op-when-unconfigured path, and — empirically in the built box �
 `GH_TOKEN` bridges from host tmpfs through the distrobox mount. ak-private's
 firstboot template gains the block.
 
+**Token renew command (A20):** `sudo strix-gh-renew` forces an immediate re-mint of
+the GitHub App token (vs the ~50-min timer) and prints the granted permissions +
+expiry — for use after changing the App's permissions on GitHub (approve them in the
+installation settings first) or rotating the key. Thin wrapper over the minter's new
+`--report` mode; no new packages.
+
 **Shared GPU & AI infrastructure (A17 — R15 new, R1 refined, objective augmented):**
 the single iGPU is shared, never VFIO-assigned: containers get direct GPU access
 (`/dev/dri` + `/dev/kfd`; `container_use_devices` enabled at first boot), VMs get

@@ -1,0 +1,12 @@
+#!/bin/bash
+# strix-gh-renew — force an immediate re-mint of the claudebox's GitHub App
+# installation token (R8/A20). Run this after you change the App's permissions
+# on github.com AND approve the change in the installation settings, so the new
+# scope takes effect at once instead of at the next ~50-min timer tick. Because
+# the minter re-reads the credential files each run, this also picks up a
+# ROTATED private key if you've replaced the persisted PEM. Prints the resulting
+# token's granted permissions + expiry so you can confirm the change took.
+# Usage: sudo strix-gh-renew
+set -euo pipefail
+[ "$(id -u)" -eq 0 ] || { echo "run as root: sudo strix-gh-renew" >&2; exit 1; }
+exec /usr/bin/strix-gh-app-token --report

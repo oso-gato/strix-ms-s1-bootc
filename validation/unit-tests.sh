@@ -213,6 +213,12 @@ bash "$mintcopy" >/dev/null 2>&1; rc=$?
 grep -q 'strix-gh-app-token.timer' "$CF"  && ok "gh-app-token.timer enabled in image" || bad "timer not enabled" ""
 grep -q 'GH_TOKEN' "$HERE/sysroot/usr/share/strix/claudebox/claudebox-init.sh" && ok "claudebox-init bridges GH_TOKEN" || bad "GH_TOKEN bridge missing" ""
 grep -q 'strix-gh-app-token.timer' "$HERE/sysroot/usr/lib/systemd/system/strix-postinstall-verify.service" && ok "verify asserts token timer armed" || bad "verify missing timer assert" ""
+# (5) A20 renew command: root-guarded thin wrapper over the minter --report
+RN="$HERE/sysroot/usr/bin/strix-gh-renew"
+{ test -f "$RN" && grep -q 'strix-gh-app-token --report' "$RN" && grep -q 'id -u' "$RN"; } \
+  && ok "strix-gh-renew wraps minter --report, root-guarded (A20)" || bad "strix-gh-renew wrong/absent" ""
+grep -q -- '--report' "$HERE/sysroot/usr/bin/strix-gh-app-token" && ok "minter supports --report (A20)" || bad "minter --report missing" ""
+grep -q 'strix-gh-renew' "$CF" && ok "strix-gh-renew chmod+shipped" || bad "strix-gh-renew not chmod'd" ""
 
 rm -rf "$tmp"
 echo

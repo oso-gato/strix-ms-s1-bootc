@@ -135,6 +135,13 @@ token). One-time operator setup:
 yourself, then install the App on it. Everything else — clone, branch, commit, push,
 open/track PRs on installed repos — runs as the App.
 
+**Changing the App's permissions later (A20):** change them on github.com → **approve
+the change in the installation settings** (GitHub requires the installing account to
+accept new permissions) → on the box run `sudo strix-gh-renew`. It re-mints the token
+immediately (instead of waiting ~50 min) and prints the granted permissions so you can
+confirm the change took. The same command picks up a **rotated private key** if you've
+replaced `/var/home/.strix-secrets/github-app/private-key.pem`.
+
 **Live-host check:** in the box, `gh auth status` shows the App installation token;
 `gh api /installation/repositories` lists the repos it can reach.
 

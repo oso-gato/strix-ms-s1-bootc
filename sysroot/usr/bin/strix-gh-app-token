@@ -14,6 +14,10 @@
 set -euo pipefail
 export LC_ALL=C
 
+# --report: after minting, print the token's granted permissions + expiry to
+# stdout (used by `strix-gh-renew`). The timer calls with no args → silent.
+REPORT=0; [ "${1:-}" = "--report" ] && REPORT=1
+
 APP_DIR=/var/home/.strix-secrets/github-app
 KEY="$APP_DIR/private-key.pem"
 APP_ID_FILE="$APP_DIR/app-id"
@@ -57,3 +61,16 @@ chown root:core "$OUT.tmp"
 chmod 0640 "$OUT.tmp"
 mv -f "$OUT.tmp" "$OUT"
 logger -t strix-gh-app-token -p info "minted GitHub App installation token (core-readable, ~1 h)"
+
+# --report: surface the scope so the operator can confirm a permission change
+# took effect (the response carries the granted permissions, not the JWT).
+if [ "$REPORT" = 1 ]; then
+  printf '%s' "$resp" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+print("GitHub App token renewed.")
+print("  expires_at:  ", d.get("expires_at", "?"))
+print("  repositories:", d.get("repository_selection", "?"))
+p = d.get("permissions", {})
+print("  permissions: ", ", ".join(f"{k}={v}" for k, v in sorted(p.items())) or "(none)")'
+fi

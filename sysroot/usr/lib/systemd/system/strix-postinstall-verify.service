@@ -56,6 +56,7 @@ ExecStart=/bin/sh -c 'test -f /usr/share/strix/claudebox/distrobox.ini || { logg
 # R8/A19: claudebox GitHub-App token machinery armed; and when the App IS
 # configured (post-setup), the minted token must be present + fresh (<65 min).
 ExecStart=/bin/sh -c 'systemctl is-active --quiet strix-gh-app-token.timer || { logger -t strix-verify -p err "strix-gh-app-token.timer not active (R8/A19)"; exit 1; }'
+ExecStart=/bin/sh -c 'test -x /usr/bin/strix-gh-renew || { logger -t strix-verify -p err "strix-gh-renew missing (R8/A20)"; exit 1; }'
 ExecStart=/bin/sh -c 'if [ -d /var/home/.strix-secrets/github-app ] && [ -f /var/home/.strix-secrets/.setup-done ]; then { [ -f /run/strix/gh-token ] && [ -n "$(find /run/strix/gh-token -mmin -65 2>/dev/null)" ]; } || { logger -t strix-verify -p err "GitHub App configured but token missing/stale (R8/A19)"; exit 1; }; fi'
 # R4d: runtime key-sync armed. R11: auto-update timer armed.
 ExecStart=/bin/sh -c 'systemctl is-active --quiet strix-keys-sync.timer || { logger -t strix-verify -p err "strix-keys-sync.timer not active"; exit 1; }'
