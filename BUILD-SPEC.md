@@ -145,6 +145,27 @@ replaced `/var/home/.strix-secrets/github-app/private-key.pem`.
 **Live-host check:** in the box, `gh auth status` shows the App installation token;
 `gh api /installation/repositories` lists the repos it can reach.
 
+## 3d. On-hardware self-test (live validation)
+
+Once the box is flashed and booted, validate the whole spec against the real
+hardware with one command — the script lives in the public repo, so the box
+pulls and runs it on demand (read-only; mutates nothing; no re-flash):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/oso-gato/strix-ms-s1-bootc/main/validation/strix-selftest.sh | sudo bash
+# deep GPU/AI container probes (ROCm gfx1151 memory, VA-API — pulls images):
+curl -fsSL https://raw.githubusercontent.com/oso-gato/strix-ms-s1-bootc/main/validation/strix-selftest.sh | sudo bash -s -- --deep
+```
+
+Every check maps to a requirement (R1–R15), objective, or amendment. It reports
+PASS (verified working) / FAIL (requirement unmet) / WARN (optional or needs a
+manual eyeball) / SKIP (deep probe not run), and exits non-zero on any FAIL. It
+actively exercises what CI could not: LACP negotiation with the switch, amdgpu +
+gfx1151 in the KFD topology, the live `ttm.pages_limit` ceiling, a rootless
+container opening the real GPU, NVMe SMART, and (with `--deep`) ROCm seeing the
+iGPU with ~120 GiB. The box also self-verifies the invariants every boot —
+`journalctl -t strix-verify -b`.
+
 ## 4. Operating notes
 
 - **Updates**: automatic (base-enabled `bootc-fetch-apply-updates.timer`,
