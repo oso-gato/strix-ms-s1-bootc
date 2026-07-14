@@ -14,10 +14,11 @@ export LC_ALL=C
 DEEP=0; [ "${1:-}" = "--deep" ] && DEEP=1
 
 P=0; F=0; W=0; S=0
+FAILS=(); WARNS=(); SKIPS=()
 ok()   { printf '  PASS  %s\n' "$*"; P=$((P+1)); }
-no()   { printf '  FAIL  %s\n' "$*"; F=$((F+1)); }
-warn() { printf '  WARN  %s\n' "$*"; W=$((W+1)); }
-skip() { printf '  SKIP  %s\n' "$*"; S=$((S+1)); }
+no()   { printf '  FAIL  %s\n' "$*"; F=$((F+1)); FAILS+=("$*"); }
+warn() { printf '  WARN  %s\n' "$*"; W=$((W+1)); WARNS+=("$*"); }
+skip() { printf '  SKIP  %s\n' "$*"; S=$((S+1)); SKIPS+=("$*"); }
 sec()  { printf '\n=== %s ===\n' "$*"; }
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -205,14 +206,27 @@ if journalctl -t strix-verify -b >/dev/null 2>&1; then
   echo "$V" | grep -q 'all invariants verified' && ok "strix-postinstall-verify: all invariants verified" || warn "verifier last line: ${V:-<none>}"
 else warn "no strix-verify journal this boot"; fi
 
-# ── Summary ──────────────────────────────────────────────────────────────────
+# ── Summary — grouped, actionable punch-list ─────────────────────────────────
+sec "SUMMARY"
+if [ "$F" -gt 0 ]; then
+  printf '\nFAILURES (%d) — requirements NOT met, fix these:\n' "$F"
+  for x in "${FAILS[@]}"; do printf '  [FAIL] %s\n' "$x"; done
+fi
+if [ "$W" -gt 0 ]; then
+  printf '\nWARNINGS (%d) — optional / not-yet-configured / manual eyeball:\n' "$W"
+  for x in "${WARNS[@]}"; do printf '  [WARN] %s\n' "$x"; done
+fi
+if [ "$S" -gt 0 ]; then
+  printf '\nSKIPPED (%d) — re-run with --deep to cover:\n' "$S"
+  for x in "${SKIPS[@]}"; do printf '  [SKIP] %s\n' "$x"; done
+fi
 printf '\n════════════════════════════════════════════════════════\n'
 printf '  strix-selftest:  %d PASS   %d FAIL   %d WARN   %d SKIP\n' "$P" "$F" "$W" "$S"
 printf '════════════════════════════════════════════════════════\n'
 if [ "$F" -gt 0 ]; then
-  echo "RESULT: FAIL — $F requirement(s) not met (see FAIL lines above)."
+  echo "RESULT: FAIL — $F requirement(s) not met (listed under FAILURES above)."
   exit 1
 fi
-echo "RESULT: PASS — no requirement failures. Review WARN lines (optional/manual items)."
+echo "RESULT: PASS — no requirement failures. Review the WARNINGS list for optional items."
 [ "$DEEP" = 0 ] && echo "Tip: re-run with --deep for the ROCm gfx1151 + VA-API container probes."
 exit 0
